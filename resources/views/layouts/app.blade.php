@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>@yield('title', 'MovieFlix') - MovieFlix</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#e50914',
+                        dark: { 100: '#1a1a2e', 200: '#141414', 300: '#16213e' },
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+    @stack('styles')
+</head>
+<body class="bg-dark-200 text-white min-h-screen">
+    {{-- NAVBAR --}}
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/90 to-transparent backdrop-blur-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-8">
+                    <a href="{{ route('home') }}" class="text-primary font-bold text-2xl tracking-tight">MovieFlix</a>
+                    <div class="hidden md:flex items-center gap-6 text-sm">
+                        <a href="{{ route('home') }}" class="hover:text-primary transition-colors">Home</a>
+                        <a href="{{ route('movie.trending') }}" class="hover:text-primary transition-colors">Trending</a>
+                        <a href="{{ route('movie.popular') }}" class="hover:text-primary transition-colors">Popular</a>
+                        <a href="{{ route('movie.topRated') }}" class="hover:text-primary transition-colors">Top Rated</a>
+                        <a href="{{ route('platform.index') }}" class="hover:text-primary transition-colors">Platform</a>
+                        <a href="{{ route('genre.index') }}" class="hover:text-primary transition-colors">Genre</a>
+                        <a href="{{ route('calendar') }}" class="hover:text-primary transition-colors">Calendar</a>
+                        <a href="{{ route('watchlist') }}" class="hover:text-primary transition-colors">Watchlist</a>
+                        <a href="{{ route('stats') }}" class="hover:text-primary transition-colors">Stats</a>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <form action="{{ route('search') }}" method="GET" class="relative hidden sm:block">
+                        <input type="text" name="q" value="{{ request('q') }}" placeholder="Search movies..."
+                            class="bg-white/10 text-white placeholder-gray-400 rounded-full px-4 py-2 pl-10 w-48 focus:w-64 transition-all focus:outline-none focus:ring-2 focus:ring-primary text-sm">
+                        <svg class="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                    </form>
+                    <button id="theme-toggle" class="p-2 rounded-full hover:bg-white/10 transition-colors" title="Toggle theme">
+                        <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                        </svg>
+                        <svg id="moon-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                        </svg>
+                    </button>
+                    <button id="mobile-menu-btn" class="md:hidden p-2 rounded-full hover:bg-white/10">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div id="mobile-menu" class="hidden md:hidden bg-dark-200/95 backdrop-blur-sm border-t border-white/10">
+            <div class="px-4 py-3 space-y-2">
+                <a href="{{ route('home') }}" class="block py-2 hover:text-primary">Home</a>
+                <a href="{{ route('movie.trending') }}" class="block py-2 hover:text-primary">Trending</a>
+                <a href="{{ route('movie.popular') }}" class="block py-2 hover:text-primary">Popular</a>
+                <a href="{{ route('movie.topRated') }}" class="block py-2 hover:text-primary">Top Rated</a>
+                <a href="{{ route('platform.index') }}" class="block py-2 hover:text-primary">Platform</a>
+                <a href="{{ route('genre.index') }}" class="block py-2 hover:text-primary">Genre</a>
+                <a href="{{ route('calendar') }}" class="block py-2 hover:text-primary">Calendar</a>
+                <a href="{{ route('watchlist') }}" class="block py-2 hover:text-primary">Watchlist</a>
+                <a href="{{ route('stats') }}" class="block py-2 hover:text-primary">Stats</a>
+                <form action="{{ route('search') }}" method="GET" class="pt-2">
+                    <input type="text" name="q" placeholder="Search movies..." class="w-full bg-white/10 text-white placeholder-gray-400 rounded-lg px-4 py-2 text-sm">
+                </form>
+            </div>
+        </div>
+    </nav>
+
+    {{-- MAIN CONTENT --}}
+    <main class="pt-16">
+        @yield('content')
+    </main>
+
+    {{-- FOOTER --}}
+    <footer class="bg-black/50 mt-16 py-12 border-t border-white/10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+                <div>
+                    <h3 class="text-primary font-bold text-lg mb-4">MovieFlix</h3>
+                    <p class="text-gray-400 text-sm">Platform rekomendasi film dan TV show terbaik. Temukan film favoritmu berdasarkan rating, trending, dan platform streaming.</p>
+                </div>
+                <div>
+                    <h4 class="font-semibold mb-3">Browse</h4>
+                    <ul class="space-y-2 text-sm text-gray-400">
+                        <li><a href="{{ route('movie.trending') }}" class="hover:text-primary">Trending</a></li>
+                        <li><a href="{{ route('movie.popular') }}" class="hover:text-primary">Popular</a></li>
+                        <li><a href="{{ route('movie.topRated') }}" class="hover:text-primary">Top Rated</a></li>
+                        <li><a href="{{ route('calendar') }}" class="hover:text-primary">Calendar</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold mb-3">Platform</h4>
+                    <ul class="space-y-2 text-sm text-gray-400">
+                        <li><a href="{{ route('platform.show', 8) }}" class="hover:text-primary">Netflix</a></li>
+                        <li><a href="{{ route('platform.show', 10) }}" class="hover:text-primary">Amazon Prime</a></li>
+                        <li><a href="{{ route('platform.show', 384) }}" class="hover:text-primary">HBO Max</a></li>
+                        <li><a href="{{ route('platform.show', 119) }}" class="hover:text-primary">Disney+</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold mb-3">Info</h4>
+                    <ul class="space-y-2 text-sm text-gray-400">
+                        <li><a href="{{ route('stats') }}" class="hover:text-primary">Statistics</a></li>
+                        <li><a href="{{ route('genre.index') }}" class="hover:text-primary">Genres</a></li>
+                        <li><a href="{{ route('watchlist') }}" class="hover:text-primary">My Watchlist</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-white/10 mt-8 pt-8 text-center text-gray-500 text-sm">
+                <p>Powered by <a href="https://www.themoviedb.org/" target="_blank" class="text-primary hover:underline">TMDB</a> &copy; {{ date('Y') }} MovieFlix. Data provided by TMDB API.</p>
+            </div>
+        </div>
+    </footer>
+
+    {{-- KEYBOARD SHORTCUTS --}}
+    <div id="shortcuts-modal" class="fixed inset-0 z-[100] hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-dark-100 rounded-2xl p-6 max-w-md w-full border border-white/10">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold">Keyboard Shortcuts</h3>
+                <button onclick="document.getElementById('shortcuts-modal').classList.add('hidden')" class="text-gray-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="space-y-3 text-sm">
+                <div class="flex justify-between"><span class="text-gray-400">Focus search</span><kbd class="bg-white/10 px-2 py-0.5 rounded">K</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-400">Close modal</span><kbd class="bg-white/10 px-2 py-0.5 rounded">Esc</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-400">Go home</span><kbd class="bg-white/10 px-2 py-0.5 rounded">H</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-400">Toggle theme</span><kbd class="bg-white/10 px-2 py-0.5 rounded">D</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-400">Show shortcuts</span><kbd class="bg-white/10 px-2 py-0.5 rounded">?</kbd></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Theme Toggle
+        const html = document.documentElement;
+        const themeToggle = document.getElementById('theme-toggle');
+        const sunIcon = document.getElementById('sun-icon');
+        const moonIcon = document.getElementById('moon-icon');
+
+        function setTheme(dark) {
+            if (dark) {
+                html.classList.add('dark');
+                html.classList.remove('light');
+                localStorage.setItem('theme', 'dark');
+                sunIcon.classList.add('hidden');
+                moonIcon.classList.remove('hidden');
+            } else {
+                html.classList.remove('dark');
+                html.classList.add('light');
+                localStorage.setItem('theme', 'light');
+                sunIcon.classList.remove('hidden');
+                moonIcon.classList.add('hidden');
+            }
+        }
+
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        setTheme(savedTheme === 'dark');
+
+        themeToggle.addEventListener('click', () => {
+            const isDark = html.classList.contains('dark');
+            setTheme(!isDark);
+        });
+
+        // Mobile Menu
+        document.getElementById('mobile-menu-btn').addEventListener('click', () => {
+            document.getElementById('mobile-menu').classList.toggle('hidden');
+        });
+
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+            switch(e.key) {
+                case 'k':
+                    e.preventDefault();
+                    document.querySelector('input[name="q"]')?.focus();
+                    break;
+                case 'h':
+                    window.location.href = '{{ route("home") }}';
+                    break;
+                case 'd':
+                    const isDark = html.classList.contains('dark');
+                    setTheme(!isDark);
+                    break;
+                case '?':
+                    document.getElementById('shortcuts-modal').classList.toggle('hidden');
+                    break;
+                case 'Escape':
+                    document.getElementById('shortcuts-modal').classList.add('hidden');
+                    break;
+            }
+        });
+
+        // Recently Viewed (localStorage)
+        function addRecentlyViewed(movie) {
+            let recent = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
+            recent = recent.filter(m => m.id !== movie.id);
+            recent.unshift(movie);
+            if (recent.length > 20) recent = recent.slice(0, 20);
+            localStorage.setItem('recentlyViewed', JSON.stringify(recent));
+        }
+
+        // Watchlist (localStorage)
+        function toggleWatchlist(movie) {
+            let watchlist = JSON.parse(localStorage.getItem('watchlist') || '[]');
+            const exists = watchlist.find(m => m.id === movie.id);
+            if (exists) {
+                watchlist = watchlist.filter(m => m.id !== movie.id);
+            } else {
+                watchlist.push(movie);
+            }
+            localStorage.setItem('watchlist', JSON.stringify(watchlist));
+            return !exists;
+        }
+
+        function isInWatchlist(id) {
+            const watchlist = JSON.parse(localStorage.getItem('watchlist') || '[]');
+            return watchlist.some(m => m.id === id);
+        }
+
+        // Log view to server for statistics
+        function logView(tmdbId, title, type, genreIds, genreNames) {
+            fetch('{{ route("api.viewLog") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ tmdb_id: tmdbId, title, type, genre_ids: genreIds, genre_names: genreNames })
+            }).catch(() => {});
+        }
+
+        // Share
+        function shareMovie(title, url) {
+            if (navigator.share) {
+                navigator.share({ title: 'MovieFlix - ' + title, url });
+            } else {
+                navigator.clipboard.writeText(url);
+                alert('Link copied!');
+            }
+        }
+    </script>
+    @stack('scripts')
+</body>
+</html>
