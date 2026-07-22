@@ -39,8 +39,14 @@
     }
 
     .scroll-container {
-        @apply flex gap-4 overflow-x-auto pb-4 scrollbar-hide;
+        @apply flex gap-4 overflow-x-auto pb-4;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
         scroll-snap-type: x mandatory;
+    }
+
+    .scroll-container::-webkit-scrollbar {
+        display: none;
     }
 
     .scroll-container > * {
