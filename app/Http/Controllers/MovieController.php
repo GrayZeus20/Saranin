@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ViewLog;
-use App\Models\GenreStat;
 use App\Services\TmdbService;
 use Illuminate\Http\Request;
 
@@ -17,20 +15,6 @@ class MovieController extends Controller
 
         if (isset($movie['error'])) {
             abort(404);
-        }
-
-        ViewLog::updateOrCreate(
-            ['tmdb_id' => $id, 'type' => 'movie'],
-            ['title' => $movie['title'] ?? 'Unknown', 'view_count' => \DB::raw('view_count + 1')]
-        );
-
-        if (!empty($movie['genres'])) {
-            foreach ($movie['genres'] as $genre) {
-                GenreStat::updateOrCreate(
-                    ['genre_id' => $genre['id']],
-                    ['genre_name' => $genre['name'], 'view_count' => \DB::raw('view_count + 1')]
-                );
-            }
         }
 
         return view('movie.show', compact('movie'));
