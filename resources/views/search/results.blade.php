@@ -28,19 +28,4 @@
         @endif
     @endif
 
-    @if($topSearches->count() > 0)
-    <div class="mt-12">
-        <h2 class="text-xl font-bold mb-4">🔥 Top Searches</h2>
-        <div class="flex flex-wrap gap-3">
-            @foreach($topSearches as $log)
-            <a href="{{ route('search', ['q' => $log->query]) }}"
-               class="bg-dark-100 hover:bg-dark-300 border border-white/10 px-4 py-2 rounded-full text-sm transition-all flex items-center gap-2">
-                {{ $log->query }}
-                <span class="text-xs text-gray-500">{{ $log->count }}x</span>
-            </a>
-            @endforeach
-        </div>
-    </div>
-    @endif
-</div>
 @endsection
