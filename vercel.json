@@ -1,13 +1,18 @@
 {
     "version": 2,
-    "outputDirectory": "public",
-    "functions": {
-        "api/index.php": {
-            "runtime": "vercel-php@0.7.1",
-            "memory": 512,
-            "maxDuration": 30
+    "builds": [
+        {
+            "src": "api/index.php",
+            "use": "vercel-php@0.7.1"
+        },
+        {
+            "src": "package.json",
+            "use": "@vercel/static-build",
+            "config": {
+                "distDir": "public"
+            }
         }
-    },
+    ],
     "routes": [
         {
             "src": "/build/(.*)",
