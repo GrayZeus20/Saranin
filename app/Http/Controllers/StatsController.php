@@ -2,19 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\TmdbService;
+
 class StatsController extends Controller
 {
+    public function __construct(protected TmdbService $tmdb) {}
+
     public function index()
     {
-        return view('stats.index', [
-            'topSearches' => collect(),
-            'topViews' => collect(),
-            'topGenres' => collect(),
-            'totalSearches' => 0,
-            'totalViews' => 0,
-            'totalGenres' => 0,
-            'recentSearches' => collect(),
-            'recentViews' => collect()
-        ]);
+        $popular = $this->tmdb->popularMovies();
+        $trending = $this->tmdb->trendingMovies();
+        $genres = $this->tmdb->genres();
+
+        return view('stats.index', compact('popular', 'trending', 'genres'));
     }
 }
