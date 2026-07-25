@@ -60,7 +60,7 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-4">
-                    <form action="{{ route('search') }}" method="GET" class="relative hidden sm:block">
+                    <form action="{{ secure_url(route('search', [], false)) }}" method="GET" class="relative hidden sm:block">
                         <input type="text" name="q" value="{{ request('q') }}" placeholder="Search movies..."
                             class="bg-white/10 text-white placeholder-gray-400 rounded-full px-4 py-2 pl-10 w-48 focus:w-64 transition-all focus:outline-none focus:ring-2 focus:ring-primary text-sm">
                         <svg class="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -94,7 +94,7 @@
                 <a href="{{ route('calendar') }}" class="block py-2 hover:text-green-500">Calendar</a>
                 <a href="{{ route('watchlist') }}" class="block py-2 hover:text-green-500">Watchlist</a>
                 <a href="{{ route('stats') }}" class="block py-2 hover:text-green-500">Stats</a>
-                <form action="{{ route('search') }}" method="GET" class="pt-2">
+                <form action="{{ secure_url(route('search', [], false)) }}" method="GET" class="pt-2">
                     <input type="text" name="q" placeholder="Search movies..." class="w-full bg-white/10 text-white placeholder-gray-400 rounded-lg px-4 py-2 text-sm">
                 </form>
             </div>
@@ -256,7 +256,7 @@
 
         // Log view to server for statistics
         function logView(tmdbId, title, type, genreIds, genreNames) {
-            fetch('{{ route("api.viewLog") }}', {
+            fetch('{{ secure_url(route("api.viewLog", [], false)) }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

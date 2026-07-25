@@ -6,7 +6,7 @@
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <h1 class="text-3xl font-bold mb-6">🔍 Search</h1>
 
-    <form action="{{ route('search') }}" method="GET" class="mb-8">
+    <form action="{{ secure_url(route('search', [], false)) }}" method="GET" class="mb-8">
         <div class="flex gap-2">
             <input type="text" name="q" value="{{ $query }}"
                    class="flex-1 bg-white/10 text-white placeholder-gray-400 rounded-lg px-6 py-3 focus:outline-none focus:ring-2 focus:ring-green-500"
