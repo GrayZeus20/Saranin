@@ -26,7 +26,7 @@
                     <span class="text-gray-400">{{ $trending['results'][0]['release_date'] ?? '' }}</span>
                 </div>
                 <div class="flex gap-3 mt-4">
-                    <a href="{{ route('movie.show', $trending['results'][0]['id']) }}" class="bg-primary hover:bg-red-700 text-white px-6 py-2.5 rounded-lg font-semibold transition-all inline-flex items-center gap-2">
+                    <a href="{{ route('movie.show', $trending['results'][0]['id']) }}" class="bg-accent hover:bg-green-600 text-white px-6 py-2.5 rounded-lg font-semibold transition-all inline-flex items-center gap-2">
                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
                         Detail
                     </a>
@@ -40,7 +40,7 @@
         <section class="mb-10">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-2xl font-bold">🔥 Trending This Week</h2>
-                <a href="{{ route('movie.trending') }}" class="text-primary hover:underline text-sm">View all</a>
+                <a href="{{ route('movie.trending') }}" class="text-accent hover:underline text-sm">View all</a>
             </div>
             <div class="scroll-container">
                 @forelse($trending['results'] ?? [] as $movie)
@@ -57,7 +57,7 @@
         <section class="mb-10">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-2xl font-bold">⭐ Popular</h2>
-                <a href="{{ route('movie.popular') }}" class="text-primary hover:underline text-sm">View all</a>
+                <a href="{{ route('movie.popular') }}" class="text-accent hover:underline text-sm">View all</a>
             </div>
             <div class="scroll-container">
                 @forelse($popular['results'] ?? [] as $movie)
@@ -74,7 +74,7 @@
         <section class="mb-10">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-2xl font-bold">🎬 Now Playing</h2>
-                <a href="{{ route('calendar') }}" class="text-primary hover:underline text-sm">View all</a>
+                <a href="{{ route('calendar') }}" class="text-accent hover:underline text-sm">View all</a>
             </div>
             <div class="scroll-container">
                 @forelse($nowPlaying['results'] ?? [] as $movie)
@@ -91,7 +91,7 @@
         <section class="mb-10">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-2xl font-bold">🏆 Top Rated</h2>
-                <a href="{{ route('movie.topRated') }}" class="text-primary hover:underline text-sm">View all</a>
+                <a href="{{ route('movie.topRated') }}" class="text-accent hover:underline text-sm">View all</a>
             </div>
             <div class="scroll-container">
                 @forelse($topRated['results'] ?? [] as $movie)
@@ -108,7 +108,7 @@
         <section class="mb-10">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-2xl font-bold">📅 Upcoming</h2>
-                <a href="{{ route('calendar') }}" class="text-primary hover:underline text-sm">View all</a>
+                <a href="{{ route('calendar') }}" class="text-accent hover:underline text-sm">View all</a>
             </div>
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 @forelse($upcoming['results'] ?? [] as $movie)
@@ -126,11 +126,11 @@
         <section>
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-2xl font-bold">🎯 Genres</h2>
-                <a href="{{ route('genre.index') }}" class="text-primary hover:underline text-sm">View all</a>
+                <a href="{{ route('genre.index') }}" class="text-accent hover:underline text-sm">View all</a>
             </div>
             <div class="flex flex-wrap gap-3">
                 @foreach($genres['genres'] as $genre)
-                    <a href="{{ route('genre.show', $genre['id']) }}" class="bg-dark-100 hover:bg-dark-300 border border-white/10 px-4 py-2 rounded-full text-sm transition-all hover:border-primary">
+                    <a href="{{ route('genre.show', $genre['id']) }}" class="bg-dark-100 hover:bg-dark-300 border border-white/10 px-4 py-2 rounded-full text-sm transition-all hover:border-accent">
                         {{ $genre['name'] }}
                     </a>
                 @endforeach

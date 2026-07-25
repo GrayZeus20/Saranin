@@ -66,7 +66,7 @@
                 {{-- Actions --}}
                 <div class="flex flex-wrap gap-3 mb-8">
                     <button onclick="watchlistAction(this, {{ $movie['id'] }}, '{{ addslashes($movie['title']) }}', '{{ app(App\Services\TmdbService::class)->imageUrl($movie['poster_path'] ?? '') }}')" 
-                            class="bg-primary hover:bg-red-700 text-white px-6 py-2.5 rounded-lg font-semibold transition-all flex items-center gap-2">
+                            class="bg-accent hover:bg-green-600 text-white px-6 py-2.5 rounded-lg font-semibold transition-all flex items-center gap-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                         <span id="wl-text-{{ $movie['id'] }}">Add to Watchlist</span>
                     </button>
@@ -125,7 +125,7 @@
                                      loading="lazy"
                                      onerror="this.src='https://via.placeholder.com/100x100?text=No+Photo'">
                             </div>
-                            <p class="text-sm font-semibold truncate group-hover:text-primary">{{ $cast['name'] }}</p>
+                            <p class="text-sm font-semibold truncate group-hover:text-accent">{{ $cast['name'] }}</p>
                             <p class="text-xs text-gray-400 truncate">{{ $cast['character'] }}</p>
                         </a>
                         @endforeach
@@ -139,7 +139,7 @@
                     <h3 class="text-lg font-bold mb-4">👥 Crew</h3>
                     <div class="flex flex-wrap gap-4">
                         @foreach(array_slice($movie['credits']['crew'], 0, 10) as $crew)
-                        <a href="{{ route('person.show', $crew['id']) }}" class="text-sm hover:text-primary">
+                        <a href="{{ route('person.show', $crew['id']) }}" class="text-sm hover:text-accent">
                             <span class="font-semibold">{{ $crew['name'] }}</span>
                             <span class="text-gray-400"> ({{ $crew['job'] }})</span>
                         </a>
@@ -172,7 +172,7 @@
         if (btn) {
             btn.textContent = 'Remove from Watchlist';
             btn.closest('button').classList.add('bg-white/10', 'hover:bg-white/20');
-            btn.closest('button').classList.remove('bg-primary', 'hover:bg-red-700');
+            btn.closest('button').classList.remove('bg-accent', 'hover:bg-green-600');
         }
     }
 
@@ -181,12 +181,12 @@
         const text = btn.querySelector('span');
         if (!removed) {
             text.textContent = 'Remove from Watchlist';
-            btn.classList.remove('bg-primary', 'hover:bg-red-700');
+            btn.classList.remove('bg-accent', 'hover:bg-green-600');
             btn.classList.add('bg-white/10', 'hover:bg-white/20');
         } else {
             text.textContent = 'Add to Watchlist';
             btn.classList.remove('bg-white/10', 'hover:bg-white/20');
-            btn.classList.add('bg-primary', 'hover:bg-red-700');
+            btn.classList.add('bg-accent', 'hover:bg-green-600');
         }
     }
 
