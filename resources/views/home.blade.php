@@ -36,6 +36,40 @@
         </div>
         @endif
 
+        {{-- Filters Section --}}
+        <section class="mb-10 bg-dark-100 p-6 rounded-2xl border border-white/10">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {{-- Categories --}}
+                <div>
+                    <h3 class="font-semibold mb-3 text-sm text-gray-400 uppercase tracking-wider">Categories</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <a href="{{ route('movie.trending') }}" class="bg-dark-300 hover:bg-accent hover:text-white px-4 py-2 rounded-full text-sm transition-all border border-white/10">🔥 Trending</a>
+                        <a href="{{ route('movie.popular') }}" class="bg-dark-300 hover:bg-accent hover:text-white px-4 py-2 rounded-full text-sm transition-all border border-white/10">⭐ Popular</a>
+                        <a href="{{ route('movie.topRated') }}" class="bg-dark-300 hover:bg-accent hover:text-white px-4 py-2 rounded-full text-sm transition-all border border-white/10">🏆 Top Rated</a>
+                        <a href="{{ route('calendar') }}" class="bg-dark-300 hover:bg-accent hover:text-white px-4 py-2 rounded-full text-sm transition-all border border-white/10">📅 Upcoming</a>
+                    </div>
+                </div>
+
+                {{-- Platforms --}}
+                <div>
+                    <h3 class="font-semibold mb-3 text-sm text-gray-400 uppercase tracking-wider">Platforms</h3>
+                    <div class="flex flex-wrap gap-2">
+                        @if(!empty($platforms['results']))
+                            @foreach(array_slice($platforms['results'], 0, 6) as $platform)
+                                <a href="{{ route('platform.show', $platform['provider_id']) }}" class="bg-dark-300 hover:bg-accent hover:text-white px-4 py-2 rounded-full text-sm transition-all border border-white/10 flex items-center gap-2">
+                                    @if(!empty($platform['logo_path']))
+                                    <img src="{{ app(App\Services\TmdbService::class)->imageUrl($platform['logo_path'], 'w45') }}" class="w-5 h-5 rounded object-cover" alt="">
+                                    @endif
+                                    {{ $platform['provider_name'] }}
+                                </a>
+                            @endforeach
+                        @endif
+                        <a href="{{ route('platform.index') }}" class="bg-dark-300 hover:bg-accent hover:text-white px-4 py-2 rounded-full text-sm transition-all border border-white/10">View all →</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         {{-- Trending Now --}}
         <section class="mb-10">
             <div class="flex items-center justify-between mb-4">
