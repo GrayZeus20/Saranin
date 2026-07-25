@@ -38,7 +38,7 @@
         <section class="bg-dark-100 border border-white/10 rounded-2xl p-6">
             <h2 class="text-xl font-bold mb-4">⭐ Top Rated</h2>
             <div class="space-y-3">
-                @foreach(array_slice($trending['results'] ?? [], 0, 10) as $i => $movie)
+                @foreach(array_slice($popular['results'] ?? [], 0, 10) as $i => $movie)
                 <a href="{{ route('movie.show', $movie['id']) }}" class="flex items-center gap-4 group">
                     <span class="text-lg font-bold text-gray-600 w-8">{{ $i + 1 }}</span>
                     <div class="flex-1 min-w-0">
