@@ -8,7 +8,7 @@
     <div class="flex flex-wrap gap-2 mb-6">
         @foreach($genres['genres'] ?? [] as $g)
         <a href="{{ route('genre.show', $g['id']) }}"
-           class="px-4 py-2 rounded-full text-sm border transition-all {{ $g['name'] == $genreName ? 'bg-accent border-accent text-white' : 'bg-dark-100 border-white/10 hover:border-accent text-gray-300' }}">
+           class="px-4 py-2 rounded-full text-sm border transition-all {{ $g['name'] == $genreName ? 'bg-green-500 border-green-500 text-white' : 'bg-dark-100 border-white/10 hover:border-green-500 text-gray-300' }}">
             {{ $g['name'] }}
         </a>
         @endforeach

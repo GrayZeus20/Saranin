@@ -51,7 +51,7 @@
                              loading="lazy"
                              onerror="this.src='https://via.placeholder.com/140x210?text=No+Poster'">
                     </div>
-                    <p class="text-sm font-semibold truncate group-hover:text-accent">{{ $credit['title'] }}</p>
+                    <p class="text-sm font-semibold truncate group-hover:text-green-500">{{ $credit['title'] }}</p>
                     <p class="text-xs text-gray-400 truncate">{{ $credit['character'] ?? '' }}</p>
                 </a>
                 @endforeach

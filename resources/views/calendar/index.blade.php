@@ -18,7 +18,7 @@
                          loading="lazy"
                          onerror="this.src='https://via.placeholder.com/64x96?text=N/A'">
                     <div class="flex-1 min-w-0">
-                        <h3 class="font-semibold group-hover:text-accent truncate">{{ $movie['title'] }}</h3>
+                        <h3 class="font-semibold group-hover:text-green-500 truncate">{{ $movie['title'] }}</h3>
                         <p class="text-sm text-gray-400">{{ $movie['release_date'] ?? 'TBA' }}</p>
                         @if(!empty($movie['overview']))
                         <p class="text-sm text-gray-500 line-clamp-2 mt-1">{{ $movie['overview'] }}</p>
@@ -42,7 +42,7 @@
                          loading="lazy"
                          onerror="this.src='https://via.placeholder.com/64x96?text=N/A'">
                     <div class="flex-1 min-w-0">
-                        <h3 class="font-semibold group-hover:text-accent truncate">{{ $movie['title'] }}</h3>
+                        <h3 class="font-semibold group-hover:text-green-500 truncate">{{ $movie['title'] }}</h3>
                         <p class="text-sm text-gray-400">{{ $movie['release_date'] ?? 'TBA' }}</p>
                         @if(!empty($movie['overview']))
                         <p class="text-sm text-gray-500 line-clamp-2 mt-1">{{ $movie['overview'] }}</p>

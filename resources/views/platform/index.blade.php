@@ -10,7 +10,7 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         @foreach($platforms as $id => $platform)
         <a href="{{ route('platform.show', $id) }}" 
-           class="bg-dark-100 border border-white/10 hover:border-accent rounded-2xl p-6 transition-all group">
+           class="bg-dark-100 border border-white/10 hover:border-green-500 rounded-2xl p-6 transition-all group">
             <div class="flex items-center gap-4">
                 @if(!empty($platform['icon']))
                 <img src="{{ $platform['icon'] }}" 
@@ -19,7 +19,7 @@
                      onerror="this.style.display='none'">
                 @endif
                 <div>
-                    <h3 class="text-lg font-bold group-hover:text-accent transition-colors">{{ $platform['name'] }}</h3>
+                    <h3 class="text-lg font-bold group-hover:text-green-500 transition-colors">{{ $platform['name'] }}</h3>
                     <p class="text-sm text-gray-400">Browse movies →</p>
                 </div>
             </div>
