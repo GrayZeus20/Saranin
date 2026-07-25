@@ -117,13 +117,13 @@
                     <h3 class="text-lg font-bold mb-4">🎭 Cast</h3>
                     <div class="scroll-container pb-2">
                         @foreach(array_slice($movie['credits']['cast'], 0, 15) as $cast)
-                        <a href="{{ route('person.show', $cast['id']) }}" class="flex-shrink-0 w-[120px] text-center group">
-                            <div class="w-[100px] h-[100px] mx-auto rounded-full overflow-hidden bg-dark-100 mb-2">
+                        <a href="{{ route('person.show', $cast['id']) }}" class="group">
+                            <div class="aspect-[2/3] rounded-lg overflow-hidden bg-dark-100 mb-2">
                                 <img src="{{ app(App\Services\TmdbService::class)->imageUrl($cast['profile_path'] ?? '', 'w185') }}" 
                                      alt="{{ $cast['name'] }}"
                                      class="w-full h-full object-cover"
                                      loading="lazy"
-                                     onerror="this.src='https://via.placeholder.com/100x100?text=No+Photo'">
+                                     onerror="this.src='https://via.placeholder.com/150x225?text=No+Photo'">
                             </div>
                             <p class="text-sm font-semibold truncate group-hover:text-accent">{{ $cast['name'] }}</p>
                             <p class="text-xs text-gray-400 truncate">{{ $cast['character'] }}</p>
