@@ -9,9 +9,9 @@
     <form action="{{ route('search') }}" method="GET" class="mb-8">
         <div class="flex gap-2">
             <input type="text" name="q" value="{{ $query }}"
-                   class="flex-1 bg-white/10 text-white placeholder-gray-400 rounded-lg px-6 py-3 focus:outline-none focus:ring-2 focus:ring-accent"
+                   class="flex-1 bg-white/10 text-white placeholder-gray-400 rounded-lg px-6 py-3 focus:outline-none focus:ring-2 focus:ring-green-500"
                    placeholder="Search movies & TV shows..." autofocus>
-            <button type="submit" class="bg-accent hover:bg-green-600 text-white px-6 py-3 rounded-lg font-semibold transition-all">Search</button>
+            <button type="submit" class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-semibold transition-all">Search</button>
         </div>
     </form>
 

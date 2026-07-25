@@ -67,8 +67,9 @@
     }
 
     .carousel-btn {
-        @apply absolute top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-black/60 hover:bg-accent text-white rounded-full flex items-center justify-center transition-all;
+        @apply absolute top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-black/60 text-white rounded-full flex items-center justify-center transition-all;
     }
+    .carousel-btn:hover { background-color: #22C55E; }
 
     .badge-platform {
         @apply px-2 py-1 text-xs font-semibold rounded-full text-green-500;
