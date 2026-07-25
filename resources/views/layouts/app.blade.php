@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'MovieFlix') - MovieFlix</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Righteous&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -12,14 +13,27 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: '#e50914',
-                        dark: { 100: '#1a1a2e', 200: '#141414', 300: '#16213e' },
+                        primary: '#1E1B4B',
+                        secondary: '#4338CA',
+                        accent: '#22C55E',
+                        background: '#0F0F23',
+                        foreground: '#F8FAFC',
+                        muted: '#27273B',
+                        border: '#312E81',
+                        destructive: '#EF4444',
+                        dark: { 100: '#1a1a2e', 200: '#0F0F23', 300: '#27273B' },
+                    },
+                    fontFamily: {
+                        sans: ['Poppins', 'sans-serif'],
+                        display: ['Righteous', 'sans-serif'],
                     }
                 }
             }
         }
     </script>
     <style>
+        body { font-family: 'Poppins', sans-serif; }
+        h1, h2, h3, .logo { font-family: 'Righteous', cursive; }
         [x-cloak] { display: none !important; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
@@ -32,17 +46,17 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center gap-8">
-                    <a href="{{ route('home') }}" class="text-primary font-bold text-2xl tracking-tight">MovieFlix</a>
+                    <a href="{{ route('home') }}" class="text-accent font-bold text-2xl tracking-tight logo">MovieFlix</a>
                     <div class="hidden md:flex items-center gap-6 text-sm">
-                        <a href="{{ route('home') }}" class="hover:text-primary transition-colors">Home</a>
-                        <a href="{{ route('movie.trending') }}" class="hover:text-primary transition-colors">Trending</a>
-                        <a href="{{ route('movie.popular') }}" class="hover:text-primary transition-colors">Popular</a>
-                        <a href="{{ route('movie.topRated') }}" class="hover:text-primary transition-colors">Top Rated</a>
-                        <a href="{{ route('platform.index') }}" class="hover:text-primary transition-colors">Platform</a>
-                        <a href="{{ route('genre.index') }}" class="hover:text-primary transition-colors">Genre</a>
-                        <a href="{{ route('calendar') }}" class="hover:text-primary transition-colors">Calendar</a>
-                        <a href="{{ route('watchlist') }}" class="hover:text-primary transition-colors">Watchlist</a>
-                        <a href="{{ route('stats') }}" class="hover:text-primary transition-colors">Stats</a>
+                        <a href="{{ route('home') }}" class="hover:text-accent transition-colors">Home</a>
+                        <a href="{{ route('movie.trending') }}" class="hover:text-accent transition-colors">Trending</a>
+                        <a href="{{ route('movie.popular') }}" class="hover:text-accent transition-colors">Popular</a>
+                        <a href="{{ route('movie.topRated') }}" class="hover:text-accent transition-colors">Top Rated</a>
+                        <a href="{{ route('platform.index') }}" class="hover:text-accent transition-colors">Platform</a>
+                        <a href="{{ route('genre.index') }}" class="hover:text-accent transition-colors">Genre</a>
+                        <a href="{{ route('calendar') }}" class="hover:text-accent transition-colors">Calendar</a>
+                        <a href="{{ route('watchlist') }}" class="hover:text-accent transition-colors">Watchlist</a>
+                        <a href="{{ route('stats') }}" class="hover:text-accent transition-colors">Stats</a>
                     </div>
                 </div>
                 <div class="flex items-center gap-4">
@@ -71,15 +85,15 @@
         </div>
         <div id="mobile-menu" class="hidden md:hidden bg-dark-200/95 backdrop-blur-sm border-t border-white/10">
             <div class="px-4 py-3 space-y-2">
-                <a href="{{ route('home') }}" class="block py-2 hover:text-primary">Home</a>
-                <a href="{{ route('movie.trending') }}" class="block py-2 hover:text-primary">Trending</a>
-                <a href="{{ route('movie.popular') }}" class="block py-2 hover:text-primary">Popular</a>
-                <a href="{{ route('movie.topRated') }}" class="block py-2 hover:text-primary">Top Rated</a>
-                <a href="{{ route('platform.index') }}" class="block py-2 hover:text-primary">Platform</a>
-                <a href="{{ route('genre.index') }}" class="block py-2 hover:text-primary">Genre</a>
-                <a href="{{ route('calendar') }}" class="block py-2 hover:text-primary">Calendar</a>
-                <a href="{{ route('watchlist') }}" class="block py-2 hover:text-primary">Watchlist</a>
-                <a href="{{ route('stats') }}" class="block py-2 hover:text-primary">Stats</a>
+                <a href="{{ route('home') }}" class="block py-2 hover:text-accent">Home</a>
+                <a href="{{ route('movie.trending') }}" class="block py-2 hover:text-accent">Trending</a>
+                <a href="{{ route('movie.popular') }}" class="block py-2 hover:text-accent">Popular</a>
+                <a href="{{ route('movie.topRated') }}" class="block py-2 hover:text-accent">Top Rated</a>
+                <a href="{{ route('platform.index') }}" class="block py-2 hover:text-accent">Platform</a>
+                <a href="{{ route('genre.index') }}" class="block py-2 hover:text-accent">Genre</a>
+                <a href="{{ route('calendar') }}" class="block py-2 hover:text-accent">Calendar</a>
+                <a href="{{ route('watchlist') }}" class="block py-2 hover:text-accent">Watchlist</a>
+                <a href="{{ route('stats') }}" class="block py-2 hover:text-accent">Stats</a>
                 <form action="{{ route('search') }}" method="GET" class="pt-2">
                     <input type="text" name="q" placeholder="Search movies..." class="w-full bg-white/10 text-white placeholder-gray-400 rounded-lg px-4 py-2 text-sm">
                 </form>
@@ -97,38 +111,38 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
                 <div>
-                    <h3 class="text-primary font-bold text-lg mb-4">MovieFlix</h3>
+                    <h3 class="text-accent font-bold text-lg mb-4 logo">MovieFlix</h3>
                     <p class="text-gray-400 text-sm">Platform rekomendasi film dan TV show terbaik. Temukan film favoritmu berdasarkan rating, trending, dan platform streaming.</p>
                 </div>
                 <div>
                     <h4 class="font-semibold mb-3">Browse</h4>
                     <ul class="space-y-2 text-sm text-gray-400">
-                        <li><a href="{{ route('movie.trending') }}" class="hover:text-primary">Trending</a></li>
-                        <li><a href="{{ route('movie.popular') }}" class="hover:text-primary">Popular</a></li>
-                        <li><a href="{{ route('movie.topRated') }}" class="hover:text-primary">Top Rated</a></li>
-                        <li><a href="{{ route('calendar') }}" class="hover:text-primary">Calendar</a></li>
+                        <li><a href="{{ route('movie.trending') }}" class="hover:text-accent">Trending</a></li>
+                        <li><a href="{{ route('movie.popular') }}" class="hover:text-accent">Popular</a></li>
+                        <li><a href="{{ route('movie.topRated') }}" class="hover:text-accent">Top Rated</a></li>
+                        <li><a href="{{ route('calendar') }}" class="hover:text-accent">Calendar</a></li>
                     </ul>
                 </div>
                 <div>
                     <h4 class="font-semibold mb-3">Platform</h4>
                     <ul class="space-y-2 text-sm text-gray-400">
-                        <li><a href="{{ route('platform.show', 8) }}" class="hover:text-primary">Netflix</a></li>
-                        <li><a href="{{ route('platform.show', 10) }}" class="hover:text-primary">Amazon Prime</a></li>
-                        <li><a href="{{ route('platform.show', 384) }}" class="hover:text-primary">HBO Max</a></li>
-                        <li><a href="{{ route('platform.show', 119) }}" class="hover:text-primary">Disney+</a></li>
+                        <li><a href="{{ route('platform.show', 8) }}" class="hover:text-accent">Netflix</a></li>
+                        <li><a href="{{ route('platform.show', 10) }}" class="hover:text-accent">Amazon Prime</a></li>
+                        <li><a href="{{ route('platform.show', 384) }}" class="hover:text-accent">HBO Max</a></li>
+                        <li><a href="{{ route('platform.show', 119) }}" class="hover:text-accent">Disney+</a></li>
                     </ul>
                 </div>
                 <div>
                     <h4 class="font-semibold mb-3">Info</h4>
                     <ul class="space-y-2 text-sm text-gray-400">
-                        <li><a href="{{ route('stats') }}" class="hover:text-primary">Statistics</a></li>
-                        <li><a href="{{ route('genre.index') }}" class="hover:text-primary">Genres</a></li>
-                        <li><a href="{{ route('watchlist') }}" class="hover:text-primary">My Watchlist</a></li>
+                        <li><a href="{{ route('stats') }}" class="hover:text-accent">Statistics</a></li>
+                        <li><a href="{{ route('genre.index') }}" class="hover:text-accent">Genres</a></li>
+                        <li><a href="{{ route('watchlist') }}" class="hover:text-accent">My Watchlist</a></li>
                     </ul>
                 </div>
             </div>
             <div class="border-t border-white/10 mt-8 pt-8 text-center text-gray-500 text-sm">
-                <p>Powered by <a href="https://www.themoviedb.org/" target="_blank" class="text-primary hover:underline">TMDB</a> &copy; {{ date('Y') }} MovieFlix. Data provided by TMDB API.</p>
+                <p>Powered by <a href="https://www.themoviedb.org/" target="_blank" class="text-accent hover:underline">TMDB</a> &copy; {{ date('Y') }} MovieFlix. Data provided by TMDB API.</p>
             </div>
         </div>
     </footer>

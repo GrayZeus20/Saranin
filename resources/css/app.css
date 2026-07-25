@@ -2,19 +2,22 @@
 
 @layer base {
     :root {
-        --color-primary: #e50914;
-        --color-bg-dark: #141414;
+        --color-primary: #1E1B4B;
+        --color-accent: #22C55E;
+        --color-bg-dark: #0F0F23;
         --color-bg-card: #1a1a2e;
-        --color-bg-surface: #16213e;
-        --color-text-primary: #ffffff;
+        --color-bg-surface: #27273B;
+        --color-text-primary: #F8FAFC;
         --color-text-secondary: #a0a0a0;
+        --color-border: #312E81;
     }
 
     .light {
-        --color-primary: #e50914;
-        --color-bg-dark: #f5f5f5;
-        --color-bg-card: #ffffff;
-        --color-bg-surface: #e8e8e8;
+        --color-primary: #1E1B4B;
+        --color-accent: #22C55E;
+        --color-bg-dark: #F8FAFC;
+        --color-bg-card: #FFFFFF;
+        --color-bg-surface: #E8E8E8;
         --color-text-primary: #1a1a2e;
         --color-text-secondary: #666666;
     }
@@ -27,11 +30,11 @@
 
 @layer components {
     .skeleton {
-        @apply animate-pulse bg-gray-700/50 rounded;
+        @apply animate-pulse bg-muted/50 rounded;
     }
 
     .movie-card {
-        @apply relative overflow-hidden rounded-lg transition-transform duration-300 hover:scale-105 hover:z-10 cursor-pointer;
+        @apply relative overflow-hidden rounded-xl transition-all duration-300 hover:scale-105 hover:z-10 hover:shadow-xl hover:shadow-accent/10 cursor-pointer border border-transparent hover:border-accent/30;
     }
 
     .movie-card img {
@@ -62,11 +65,11 @@
     }
 
     .carousel-btn {
-        @apply absolute top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-all;
+        @apply absolute top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-black/60 hover:bg-accent text-white rounded-full flex items-center justify-center transition-all;
     }
 
     .badge-platform {
-        @apply px-2 py-1 text-xs font-semibold rounded-full;
+        @apply px-2 py-1 text-xs font-semibold rounded-full bg-accent/20 text-accent;
     }
 }
 
@@ -80,7 +83,7 @@
 }
 
 .dark .skeleton {
-    background: linear-gradient(90deg, #1a1a2e 25%, #2a2a3e 50%, #1a1a2e 75%);
+    background: linear-gradient(90deg, #1a1a2e 25%, #27273B 50%, #1a1a2e 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
 }

@@ -9,7 +9,7 @@
     <div id="watchlist-empty" class="text-center py-20 hidden">
         <div class="text-6xl mb-4">🎬</div>
         <p class="text-xl text-gray-400 mb-4">Your watchlist is empty</p>
-        <a href="{{ route('home') }}" class="text-primary hover:underline">Browse movies →</a>
+        <a href="{{ route('home') }}" class="text-accent hover:underline">Browse movies →</a>
     </div>
 
     <div id="watchlist-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">

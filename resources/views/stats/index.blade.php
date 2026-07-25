@@ -15,7 +15,7 @@
                     <span class="text-2xl font-bold text-gray-600 w-8">{{ $i + 1 }}</span>
                     <img src="{{ app(App\Services\TmdbService::class)->imageUrl($movie['poster_path'] ?? '', 'w92') }}" class="w-10 h-14 rounded object-cover">
                     <div class="flex-1 min-w-0">
-                        <p class="font-semibold group-hover:text-primary truncate">{{ $movie['title'] ?? $movie['name'] ?? 'Unknown' }}</p>
+                        <p class="font-semibold group-hover:text-accent truncate">{{ $movie['title'] ?? $movie['name'] ?? 'Unknown' }}</p>
                         <p class="text-sm text-gray-400">{{ number_format($movie['popularity'] ?? 0) }} popularity</p>
                     </div>
                 </a>
@@ -28,7 +28,7 @@
             <div class="flex flex-wrap gap-3">
                 @foreach(($genres['genres'] ?? []) as $genre)
                 <a href="{{ route('genre.show', $genre['id']) }}"
-                   class="bg-dark-300 hover:bg-primary border border-white/10 px-4 py-2 rounded-full text-sm transition-all">
+                   class="bg-dark-300 hover:bg-accent border border-white/10 px-4 py-2 rounded-full text-sm transition-all">
                     {{ $genre['name'] }}
                 </a>
                 @endforeach
@@ -42,7 +42,7 @@
                 <a href="{{ route('movie.show', $movie['id']) }}" class="flex items-center gap-4 group">
                     <span class="text-lg font-bold text-gray-600 w-8">{{ $i + 1 }}</span>
                     <div class="flex-1 min-w-0">
-                        <p class="font-semibold group-hover:text-primary truncate">{{ $movie['title'] ?? 'Unknown' }}</p>
+                        <p class="font-semibold group-hover:text-accent truncate">{{ $movie['title'] ?? 'Unknown' }}</p>
                         <p class="text-sm text-gray-400">⭐ {{ number_format($movie['vote_average'] ?? 0, 1) }}</p>
                     </div>
                 </a>
