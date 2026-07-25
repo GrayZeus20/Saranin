@@ -52,6 +52,13 @@
     .scroll-container > * {
         scroll-snap-align: start;
         flex-shrink: 0;
+        width: 180px;
+    }
+
+    @media (min-width: 640px) {
+        .scroll-container > * {
+            width: 200px;
+        }
     }
 
     .carousel-btn {

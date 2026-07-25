@@ -1,4 +1,4 @@
-<div class="movie-card w-[180px] sm:w-[200px]" x-data>
+<div class="movie-card" x-data>
     <a href="{{ route('movie.show', $movie['id']) }}" 
        onclick="addRecentlyViewed({id:{{ $movie['id'] }},title:'{{ addslashes($movie['title'] ?? $movie['name'] ?? '') }}',poster:'{{ app(\App\Services\TmdbService::class)->imageUrl($movie['poster_path'] ?? '') }}'})"
        class="block">
