@@ -16,7 +16,8 @@ class HomeController extends Controller
         $upcoming = $this->tmdb->upcomingMovies();
         $topRated = $this->tmdb->topRatedMovies();
         $genres = $this->tmdb->genres();
+        $platforms = $this->tmdb->platformProviders();
 
-        return view('home', compact('popular', 'trending', 'nowPlaying', 'upcoming', 'topRated', 'genres'));
+        return view('home', compact('popular', 'trending', 'nowPlaying', 'upcoming', 'topRated', 'genres', 'platforms'));
     }
 }
