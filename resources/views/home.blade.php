@@ -76,12 +76,16 @@
                 <h2 class="text-2xl font-bold">🔥 Trending This Week</h2>
                 <a href="{{ route('movie.trending') }}" class="text-green-500 hover:underline text-sm">View all</a>
             </div>
-            <div class="scroll-container">
+            <div class="flex gap-4 overflow-x-auto pb-4" style="scrollbar-width:none;-ms-overflow-style:none;">
                 @forelse($trending['results'] ?? [] as $movie)
-                    @include('partials.movie-card', compact('movie'))
+                    <div class="shrink-0" style="width:140px;">
+                        @include('partials.movie-card', compact('movie'))
+                    </div>
                 @empty
                     @for($i=0; $i<8; $i++)
-                        @include('partials.skeleton-card')
+                        <div class="shrink-0" style="width:140px;">
+                            @include('partials.skeleton-card')
+                        </div>
                     @endfor
                 @endforelse
             </div>
@@ -93,12 +97,16 @@
                 <h2 class="text-2xl font-bold">⭐ Popular</h2>
                 <a href="{{ route('movie.popular') }}" class="text-green-500 hover:underline text-sm">View all</a>
             </div>
-            <div class="scroll-container">
+            <div class="flex gap-4 overflow-x-auto pb-4" style="scrollbar-width:none;-ms-overflow-style:none;">
                 @forelse($popular['results'] ?? [] as $movie)
-                    @include('partials.movie-card', compact('movie'))
+                    <div class="shrink-0" style="width:140px;">
+                        @include('partials.movie-card', compact('movie'))
+                    </div>
                 @empty
                     @for($i=0; $i<8; $i++)
-                        @include('partials.skeleton-card')
+                        <div class="shrink-0" style="width:140px;">
+                            @include('partials.skeleton-card')
+                        </div>
                     @endfor
                 @endforelse
             </div>
@@ -110,12 +118,16 @@
                 <h2 class="text-2xl font-bold">🎬 Now Playing</h2>
                 <a href="{{ route('calendar') }}" class="text-green-500 hover:underline text-sm">View all</a>
             </div>
-            <div class="scroll-container">
+            <div class="flex gap-4 overflow-x-auto pb-4" style="scrollbar-width:none;-ms-overflow-style:none;">
                 @forelse($nowPlaying['results'] ?? [] as $movie)
-                    @include('partials.movie-card', compact('movie'))
+                    <div class="shrink-0" style="width:140px;">
+                        @include('partials.movie-card', compact('movie'))
+                    </div>
                 @empty
                     @for($i=0; $i<8; $i++)
-                        @include('partials.skeleton-card')
+                        <div class="shrink-0" style="width:140px;">
+                            @include('partials.skeleton-card')
+                        </div>
                     @endfor
                 @endforelse
             </div>
@@ -127,12 +139,16 @@
                 <h2 class="text-2xl font-bold">🏆 Top Rated</h2>
                 <a href="{{ route('movie.topRated') }}" class="text-green-500 hover:underline text-sm">View all</a>
             </div>
-            <div class="scroll-container">
+            <div class="flex gap-4 overflow-x-auto pb-4" style="scrollbar-width:none;-ms-overflow-style:none;">
                 @forelse($topRated['results'] ?? [] as $movie)
-                    @include('partials.movie-card', compact('movie'))
+                    <div class="shrink-0" style="width:140px;">
+                        @include('partials.movie-card', compact('movie'))
+                    </div>
                 @empty
                     @for($i=0; $i<8; $i++)
-                        @include('partials.skeleton-card')
+                        <div class="shrink-0" style="width:140px;">
+                            @include('partials.skeleton-card')
+                        </div>
                     @endfor
                 @endforelse
             </div>
