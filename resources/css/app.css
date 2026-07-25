@@ -30,7 +30,8 @@
 
 @layer components {
     .skeleton {
-        @apply animate-pulse bg-muted/50 rounded;
+        @apply animate-pulse rounded;
+        background-color: rgba(39, 39, 59, 0.5);
     }
 
     .movie-card {
