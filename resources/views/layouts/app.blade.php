@@ -18,17 +18,27 @@
                         primary: '#1E1B4B',
                         secondary: '#4338CA',
                         accent: '#22C55E',
-                        background: '#0F0F23',
-                        foreground: '#F8FAFC',
-                        muted: '#27273B',
+                        background: 'var(--color-bg-dark)',
+                        foreground: 'var(--color-text-primary)',
+                        muted: 'var(--color-bg-surface)',
                         border: '#312E81',
                         destructive: '#EF4444',
-                        dark: { 100: '#1a1a2e', 200: '#0F0F23', 300: '#27273B' },
+                        dark: {
+                            100: 'var(--color-bg-card)',
+                            200: 'var(--color-bg-dark)',
+                            300: 'var(--color-bg-surface)',
+                        },
                     },
                     fontFamily: {
                         sans: ['Poppins', 'sans-serif'],
                         display: ['Righteous', 'sans-serif'],
-                    }
+                    },
+                    textColor: {
+                        white: 'var(--color-text-primary)',
+                        gray: {
+                            400: 'var(--color-text-secondary)',
+                        },
+                    },
                 }
             }
         }
