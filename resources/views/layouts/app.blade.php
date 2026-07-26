@@ -7,6 +7,7 @@
     <title>@yield('title', 'MovieFlix') - MovieFlix</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Righteous&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -37,6 +38,12 @@
         [x-cloak] { display: none !important; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .scroll-container { display: flex; gap: 1rem; overflow-x: auto; padding-bottom: 0.5rem; scrollbar-width: none; -ms-overflow-style: none; }
+        .scroll-container::-webkit-scrollbar { display: none; }
+        .skeleton { background: linear-gradient(90deg, #27273B 25%, #3a3a52 50%, #27273B 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
     </style>
     @stack('styles')
 </head>
@@ -60,7 +67,7 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-4">
-                    <form action="{{ secure_url(route('search', [], false)) }}" method="GET" class="relative hidden sm:block">
+                    <form action="{{ url(route('search', [], false)) }}" method="GET" class="relative hidden sm:block">
                         <input type="text" name="q" value="{{ request('q') }}" placeholder="Search movies..."
                             class="bg-white/10 text-white placeholder-gray-400 rounded-full px-4 py-2 pl-10 w-48 focus:w-64 transition-all focus:outline-none focus:ring-2 focus:ring-primary text-sm">
                         <svg class="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -94,7 +101,7 @@
                 <a href="{{ route('calendar') }}" class="block py-2 hover:text-green-500">Calendar</a>
                 <a href="{{ route('watchlist') }}" class="block py-2 hover:text-green-500">Watchlist</a>
                 <a href="{{ route('stats') }}" class="block py-2 hover:text-green-500">Stats</a>
-                <form action="{{ secure_url(route('search', [], false)) }}" method="GET" class="pt-2">
+                <form action="{{ url(route('search', [], false)) }}" method="GET" class="pt-2">
                     <input type="text" name="q" placeholder="Search movies..." class="w-full bg-white/10 text-white placeholder-gray-400 rounded-lg px-4 py-2 text-sm">
                 </form>
             </div>
@@ -256,7 +263,7 @@
 
         // Log view to server for statistics
         function logView(tmdbId, title, type, genreIds, genreNames) {
-            fetch('{{ secure_url(route("api.viewLog", [], false)) }}', {
+            fetch('{{ url(route("api.viewLog", [], false)) }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
