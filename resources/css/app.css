@@ -30,6 +30,13 @@
 }
 
 @layer components {
+    .loading-overlay {
+        @apply fixed inset-0 z-[9999] flex flex-col items-center justify-center transition-opacity duration-500;
+        background-color: var(--color-bg-dark);
+    }
+    .progress-bar {
+        @apply fixed top-0 left-0 h-1 bg-green-500 z-[9999] transition-all duration-300;
+    }
     .skeleton {
         @apply animate-pulse rounded;
         background-color: rgba(39, 39, 59, 0.5);

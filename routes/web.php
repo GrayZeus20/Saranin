@@ -22,6 +22,7 @@ Route::get('/search', [SearchController::class, 'index'])->name('search');
 
 Route::get('/platform', [PlatformController::class, 'index'])->name('platform.index');
 Route::get('/platform/{id}', [PlatformController::class, 'show'])->name('platform.show');
+Route::get('/platform-filter', [PlatformController::class, 'filter'])->name('platform.filter');
 
 Route::get('/genre', [GenreController::class, 'index'])->name('genre.index');
 Route::get('/genre/{id}', [GenreController::class, 'show'])->name('genre.show');
