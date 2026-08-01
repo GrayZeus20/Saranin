@@ -51,6 +51,17 @@
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         .scroll-container { display: flex; gap: 1rem; overflow-x: auto; padding-bottom: 0.5rem; scrollbar-width: none; -ms-overflow-style: none; }
         .scroll-container::-webkit-scrollbar { display: none; }
+        .loading-overlay {
+            position: fixed; inset: 0; z-index: 9999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background-color: var(--color-bg-dark, #0F0F23);
+            transition: opacity 0.5s;
+        }
+        .progress-bar {
+            position: fixed; top: 0; left: 0; height: 4px; width: 0;
+            background-color: #22C55E; z-index: 9999;
+            transition: width 0.3s;
+        }
         .skeleton { background: linear-gradient(90deg, #27273B 25%, #3a3a52 50%, #27273B 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
         .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -59,6 +70,15 @@
     @stack('styles')
 </head>
 <body class="bg-dark-200 text-white min-h-screen">
+    {{-- LOADING OVERLAY --}}
+    <div id="loader" class="loading-overlay">
+        <h1 class="text-green-500 text-4xl font-bold logo mb-4">MovieFlix</h1>
+        <div class="w-12 h-12 border-4 border-white/20 border-t-green-500 rounded-full animate-spin"></div>
+    </div>
+    
+    {{-- PROGRESS BAR --}}
+    <div id="progress" class="progress-bar" style="width: 0%"></div>
+
     {{-- NAVBAR --}}
     <nav class="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/90 to-transparent backdrop-blur-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -243,6 +263,21 @@
                     document.getElementById('shortcuts-modal').classList.add('hidden');
                     break;
             }
+        });
+
+        // Loading Overlay Logic
+        window.addEventListener('load', () => {
+            const loader = document.getElementById('loader');
+            loader.style.opacity = '0';
+            setTimeout(() => loader.style.display = 'none', 500);
+        });
+
+        document.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', (e) => {
+                if (link.hostname === window.location.hostname && !link.getAttribute('href').startsWith('#')) {
+                    document.getElementById('progress').style.width = '70%';
+                }
+            });
         });
 
         // Recently Viewed (localStorage)

@@ -3,11 +3,6 @@
 @section('title', 'Home')
 
 @section('content')
-@extends('layouts.app')
-
-@section('title', 'Home')
-
-@section('content')
 <div x-data="{ showFilter: false }" class="relative bg-dark-200">
     <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-16">
         
@@ -42,11 +37,14 @@
         </div>
 
         {{-- Hero Section ... (tetap sama) --}}
-        @if(!empty($trending['results']))
-        <div class="relative h-[80vh] rounded-3xl overflow-hidden shadow-2xl">
+        <div x-data="{ heroLoaded: false }" class="relative h-[80vh] rounded-3xl overflow-hidden shadow-2xl">
+            {{-- Skeleton Hero --}}
+            <div x-show="!heroLoaded" x-transition.opacity class="absolute inset-0 skeleton bg-dark-100"></div>
+            @if(!empty($trending['results']))
             <div class="absolute inset-0 bg-gradient-to-t from-dark-200 via-dark-200/50 to-transparent z-10"></div>
             <img src="{{ app(App\Services\TmdbService::class)->imageUrl($trending['results'][0]['backdrop_path'], 'original') }}"
                 alt="{{ $trending['results'][0]['title'] ?? '' }}"
+                @load="heroLoaded = true"
                 class="w-full h-full object-cover">
             <div class="absolute bottom-0 left-0 right-0 p-10 z-20">
                 <h1 class="text-5xl md:text-7xl font-extrabold mb-4 text-white tracking-tight drop-shadow-lg">{{ $trending['results'][0]['title'] ?? '' }}</h1>
@@ -57,8 +55,8 @@
                     </a>
                 </div>
             </div>
+            @endif
         </div>
-        @endif
 
         {{-- Section list ... --}}
         @php

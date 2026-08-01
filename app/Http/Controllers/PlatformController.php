@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\TmdbService;
+use Illuminate\Http\Request;
 
 class PlatformController extends Controller
 {
@@ -30,5 +31,30 @@ class PlatformController extends Controller
         $platform = $this->platforms[$providerId] ?? ['name' => 'Platform #' . $providerId, 'icon' => ''];
 
         return view('platform.show', ['movies' => $movies, 'platform' => $platform, 'providerId' => $providerId]);
+    }
+
+    public function filter(Request $request)
+    {
+        $providers = $request->input('providers', []);
+        $allResults = [];
+
+        foreach ($providers as $providerId) {
+            $data = $this->tmdb->discoverByPlatform((int) $providerId);
+            $platformName = $this->platforms[$providerId]['name'] ?? "Platform #$providerId";
+            foreach (($data['results'] ?? []) as $movie) {
+                $movie['_platform'] = $platformName;
+                $allResults[] = $movie;
+            }
+        }
+
+        usort($allResults, fn($a, $b) => ($b['popularity'] ?? 0) <=> ($a['popularity'] ?? 0));
+
+        $platformNames = array_map(fn($id) => $this->platforms[$id]['name'] ?? "Platform #$id", $providers);
+
+        return view('platform.show', [
+            'movies' => ['results' => $allResults],
+            'platform' => ['name' => implode(' + ', $platformNames), 'icon' => ''],
+            'providerId' => null,
+        ]);
     }
 }
