@@ -13,7 +13,14 @@
             "dest": "/public/build/$1"
         },
         {
-            "src": "^/(.*)$",
+            "src": "/assets/(.*)",
+            "dest": "/public/assets/$1"
+        },
+        {
+            "handle": "filesystem"
+        },
+        {
+            "src": "/(.*)",
             "dest": "/api/index.php"
         }
     ]
