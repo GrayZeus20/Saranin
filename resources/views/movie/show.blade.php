@@ -183,10 +183,12 @@
             text.textContent = 'Remove from Watchlist';
             btn.classList.remove('bg-green-500', 'hover:bg-green-600');
             btn.classList.add('bg-white/10', 'hover:bg-white/20');
+            showToast('Added to watchlist');
         } else {
             text.textContent = 'Add to Watchlist';
             btn.classList.remove('bg-white/10', 'hover:bg-white/20');
             btn.classList.add('bg-green-500', 'hover:bg-green-600');
+            showToast('Removed from watchlist');
         }
     }
 

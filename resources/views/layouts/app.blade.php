@@ -79,6 +79,14 @@
     {{-- PROGRESS BAR --}}
     <div id="progress" class="progress-bar" style="width: 0%"></div>
 
+    {{-- TOAST NOTIFICATION --}}
+    <div id="toast" class="fixed bottom-8 right-8 z-[100] transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+        <div class="bg-green-500 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3">
+            <i class="fas fa-check-circle"></i>
+            <span id="toast-message">Action successful!</span>
+        </div>
+    </div>
+
     {{-- NAVBAR --}}
     <nav class="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/90 to-transparent backdrop-blur-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -305,6 +313,29 @@
         function isInWatchlist(id) {
             const watchlist = JSON.parse(localStorage.getItem('watchlist') || '[]');
             return watchlist.some(m => m.id === id);
+        }
+
+        // Toast Helper
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-message');
+            const toastContainer = toast.querySelector('div');
+
+            toastMsg.textContent = message;
+
+            if (type === 'error') {
+                toastContainer.classList.replace('bg-green-500', 'bg-red-500');
+            } else {
+                toastContainer.classList.replace('bg-red-500', 'bg-green-500');
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+                toast.classList.remove('translate-y-0', 'opacity-100');
+            }, 3000);
         }
 
         // Log view to server for statistics
