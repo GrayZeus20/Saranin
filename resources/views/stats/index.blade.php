@@ -17,7 +17,7 @@
                 @foreach(array_slice($trending['results'] ?? [], 0, 10) as $i => $movie)
                 <a href="{{ route('movie.show', $movie['id']) }}" class="flex items-center gap-3 py-2 px-2 rounded-xl hover:bg-white/5 transition-all group">
                     <span class="text-sm font-bold text-slate-600 w-6 text-right tabular-nums">{{ $i + 1 }}</span>
-                    <img src="{{ app(App\Services\TmdbService::class)->imageUrl($movie['poster_path'] ?? '', 'w92') }}" class="w-9 h-13 rounded-lg object-cover flex-shrink-0 border border-white/5">
+                    <img src="{{ app(App\Services\TmdbService::class)->imageUrl($movie['poster_path'] ?? '', 'w92') }}" class="w-9 h-[52px] rounded-lg object-cover flex-shrink-0 border border-white/5">
                     <div class="flex-1 min-w-0">
                         <p class="text-sm font-semibold text-slate-300 group-hover:text-white truncate transition-colors">{{ $movie['title'] ?? $movie['name'] ?? 'Unknown' }}</p>
                         <p class="text-xs text-slate-600">{{ number_format($movie['popularity'] ?? 0) }} popularity</p>
