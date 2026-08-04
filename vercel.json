@@ -9,15 +9,20 @@
     },
     "routes": [
         {
+            "src": "/favicon\\.ico",
+            "dest": "/public/favicon.ico"
+        },
+        {
+            "src": "/favicon\\.png",
+            "dest": "/public/favicon.png"
+        },
+        {
             "src": "/build/(.*)",
             "dest": "/public/build/$1"
         },
         {
             "src": "/assets/(.*)",
             "dest": "/public/assets/$1"
-        },
-        {
-            "handle": "filesystem"
         },
         {
             "src": "/(.*)",
