@@ -1,20 +1,16 @@
 @props(['currentPage', 'lastPage'])
 
 @if($lastPage > 1)
-<div class="flex justify-center items-center gap-2 mt-10 mb-6">
-    {{-- Previous Button --}}
+<div class="flex justify-center items-center gap-1.5 mt-12 mb-6">
     @if($currentPage > 1)
         <a href="{{ request()->fullUrlWithQuery(['page' => $currentPage - 1]) }}"
-           class="px-4 py-2 bg-dark-100 hover:bg-dark-300 rounded-lg text-sm transition-colors border border-white/10 hover:border-green-500">
-            &laquo; Prev
+           class="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-slate-300 transition-all border border-white/5 hover:border-white/10">
+            ← Prev
         </a>
     @else
-        <span class="px-4 py-2 bg-dark-100 rounded-lg text-sm text-gray-600 border border-white/5 cursor-not-allowed">
-            &laquo; Prev
-        </span>
+        <span class="px-4 py-2 bg-white/5 rounded-xl text-sm text-slate-600 border border-white/5 cursor-not-allowed">← Prev</span>
     @endif
 
-    {{-- Page Numbers --}}
     @php
         $start = max(1, $currentPage - 2);
         $end = min($lastPage, $currentPage + 2);
@@ -22,45 +18,36 @@
 
     @if($start > 1)
         <a href="{{ request()->fullUrlWithQuery(['page' => 1]) }}"
-           class="px-3 py-2 bg-dark-100 hover:bg-dark-300 rounded-lg text-sm transition-colors border border-white/10 hover:border-green-500">
-            1
-        </a>
+           class="w-9 h-9 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-xl text-sm text-slate-400 transition-all border border-white/5 hover:border-white/10">1</a>
         @if($start > 2)
-            <span class="px-2 text-gray-500">...</span>
+            <span class="px-1 text-slate-600 text-sm">…</span>
         @endif
     @endif
 
     @for($i = $start; $i <= $end; $i++)
         @if($i == $currentPage)
-            <span class="px-3 py-2 bg-green-500 text-white rounded-lg text-sm font-semibold">{{ $i }}</span>
+            <span class="w-9 h-9 flex items-center justify-center bg-accent text-slate-900 rounded-xl text-sm font-semibold">{{ $i }}</span>
         @else
             <a href="{{ request()->fullUrlWithQuery(['page' => $i]) }}"
-               class="px-3 py-2 bg-dark-100 hover:bg-dark-300 rounded-lg text-sm transition-colors border border-white/10 hover:border-green-500">
-                {{ $i }}
-            </a>
+               class="w-9 h-9 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-xl text-sm text-slate-400 transition-all border border-white/5 hover:border-white/10">{{ $i }}</a>
         @endif
     @endfor
 
     @if($end < $lastPage)
         @if($end < $lastPage - 1)
-            <span class="px-2 text-gray-500">...</span>
+            <span class="px-1 text-slate-600 text-sm">…</span>
         @endif
         <a href="{{ request()->fullUrlWithQuery(['page' => $lastPage]) }}"
-           class="px-3 py-2 bg-dark-100 hover:bg-dark-300 rounded-lg text-sm transition-colors border border-white/10 hover:border-green-500">
-            {{ $lastPage }}
-        </a>
+           class="w-9 h-9 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-xl text-sm text-slate-400 transition-all border border-white/5 hover:border-white/10">{{ $lastPage }}</a>
     @endif
 
-    {{-- Next Button --}}
     @if($currentPage < $lastPage)
         <a href="{{ request()->fullUrlWithQuery(['page' => $currentPage + 1]) }}"
-           class="px-4 py-2 bg-dark-100 hover:bg-dark-300 rounded-lg text-sm transition-colors border border-white/10 hover:border-green-500">
-            Next &raquo;
+           class="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-slate-300 transition-all border border-white/5 hover:border-white/10">
+            Next →
         </a>
     @else
-        <span class="px-4 py-2 bg-dark-100 rounded-lg text-sm text-gray-600 border border-white/5 cursor-not-allowed">
-            Next &raquo;
-        </span>
+        <span class="px-4 py-2 bg-white/5 rounded-xl text-sm text-slate-600 border border-white/5 cursor-not-allowed">Next →</span>
     @endif
 </div>
 @endif

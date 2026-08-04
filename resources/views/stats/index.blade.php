@@ -4,46 +4,52 @@
 
 @section('content')
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <h1 class="text-3xl font-bold mb-8">📊 Statistics</h1>
+    <div class="mb-8">
+        <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">Statistics</h1>
+        <p class="text-slate-500 text-sm mt-1">A quick look at what's trending</p>
+    </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        <section class="bg-dark-100 border border-white/10 rounded-2xl p-6">
-            <h2 class="text-xl font-bold mb-4">🔥 Trending Movies</h2>
-            <div class="space-y-3">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {{-- Trending --}}
+        <section class="bg-slate-900/50 border border-white/5 rounded-2xl p-5">
+            <h2 class="text-lg font-bold text-white mb-4">Trending movies</h2>
+            <div class="space-y-1">
                 @foreach(array_slice($trending['results'] ?? [], 0, 10) as $i => $movie)
-                <a href="{{ route('movie.show', $movie['id']) }}" class="flex items-center gap-4 group">
-                    <span class="text-2xl font-bold text-gray-600 w-8">{{ $i + 1 }}</span>
-                    <img src="{{ app(App\Services\TmdbService::class)->imageUrl($movie['poster_path'] ?? '', 'w92') }}" class="w-10 h-14 rounded object-cover">
+                <a href="{{ route('movie.show', $movie['id']) }}" class="flex items-center gap-3 py-2 px-2 rounded-xl hover:bg-white/5 transition-all group">
+                    <span class="text-sm font-bold text-slate-600 w-6 text-right tabular-nums">{{ $i + 1 }}</span>
+                    <img src="{{ app(App\Services\TmdbService::class)->imageUrl($movie['poster_path'] ?? '', 'w92') }}" class="w-9 h-13 rounded-lg object-cover flex-shrink-0 border border-white/5">
                     <div class="flex-1 min-w-0">
-                        <p class="font-semibold group-hover:text-green-500 truncate">{{ $movie['title'] ?? $movie['name'] ?? 'Unknown' }}</p>
-                        <p class="text-sm text-gray-400">{{ number_format($movie['popularity'] ?? 0) }} popularity</p>
+                        <p class="text-sm font-semibold text-slate-300 group-hover:text-white truncate transition-colors">{{ $movie['title'] ?? $movie['name'] ?? 'Unknown' }}</p>
+                        <p class="text-xs text-slate-600">{{ number_format($movie['popularity'] ?? 0) }} popularity</p>
                     </div>
                 </a>
                 @endforeach
             </div>
         </section>
 
-        <section class="bg-dark-100 border border-white/10 rounded-2xl p-6">
-            <h2 class="text-xl font-bold mb-4">🎭 Genres</h2>
-            <div class="flex flex-wrap gap-3">
+        {{-- Genres --}}
+        <section class="bg-slate-900/50 border border-white/5 rounded-2xl p-5">
+            <h2 class="text-lg font-bold text-white mb-4">Browse by genre</h2>
+            <div class="flex flex-wrap gap-2">
                 @foreach(($genres['genres'] ?? []) as $genre)
                 <a href="{{ route('genre.show', $genre['id']) }}"
-                   class="bg-dark-300 hover:bg-green-500 border border-white/10 px-4 py-2 rounded-full text-sm transition-all">
+                   class="bg-white/5 hover:bg-accent/20 hover:text-accent border border-white/5 hover:border-accent/30 px-3.5 py-2 rounded-xl text-sm font-medium transition-all">
                     {{ $genre['name'] }}
                 </a>
                 @endforeach
             </div>
         </section>
 
-        <section class="bg-dark-100 border border-white/10 rounded-2xl p-6">
-            <h2 class="text-xl font-bold mb-4">⭐ Top Rated</h2>
-            <div class="space-y-3">
+        {{-- Top Rated --}}
+        <section class="bg-slate-900/50 border border-white/5 rounded-2xl p-5 lg:col-span-2">
+            <h2 class="text-lg font-bold text-white mb-4">Top rated</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
                 @foreach(array_slice($popular['results'] ?? [], 0, 10) as $i => $movie)
-                <a href="{{ route('movie.show', $movie['id']) }}" class="flex items-center gap-4 group">
-                    <span class="text-lg font-bold text-gray-600 w-8">{{ $i + 1 }}</span>
+                <a href="{{ route('movie.show', $movie['id']) }}" class="flex items-center gap-3 py-2 px-2 rounded-xl hover:bg-white/5 transition-all group">
+                    <span class="text-sm font-bold text-slate-600 w-6 text-right tabular-nums">{{ $i + 1 }}</span>
                     <div class="flex-1 min-w-0">
-                        <p class="font-semibold group-hover:text-green-500 truncate">{{ $movie['title'] ?? 'Unknown' }}</p>
-                        <p class="text-sm text-gray-400">⭐ {{ number_format($movie['vote_average'] ?? 0, 1) }}</p>
+                        <p class="text-sm font-semibold text-slate-300 group-hover:text-white truncate transition-colors">{{ $movie['title'] ?? 'Unknown' }}</p>
+                        <p class="text-xs text-amber-400 font-medium">{{ number_format($movie['vote_average'] ?? 0, 1) }}</p>
                     </div>
                 </a>
                 @endforeach
