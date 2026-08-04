@@ -61,7 +61,7 @@
         .fade-in { animation: fadeIn 0.4s ease-out both; }
 
         .grain {
-            position: fixed; inset: 0; z-index: 9998; pointer-events: none; opacity: 0.03;
+            position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.03;
             background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
             background-repeat: repeat;
         }
@@ -284,7 +284,10 @@
         document.querySelectorAll('a').forEach(link => {
             link.addEventListener('click', (e) => {
                 if (link.hostname === window.location.hostname && !link.getAttribute('href').startsWith('#')) {
-                    document.getElementById('progress').style.width = '70%';
+                    const bar = document.getElementById('progress');
+                    bar.style.width = '70%';
+                    setTimeout(() => { bar.style.width = '100%'; }, 200);
+                    setTimeout(() => { bar.style.width = '0%'; }, 800);
                 }
             });
         });
@@ -325,11 +328,11 @@
             toastMsg.textContent = message;
 
             if (type === 'error') {
-                toastContainer.querySelector('i').classList.replace('text-accent', 'text-red-400');
-                toastContainer.classList.replace('border-accent/30', 'border-red-500/30');
+                toastContainer.querySelector('i').classList.add('text-red-400');
+                toastContainer.querySelector('i').classList.remove('text-accent');
             } else {
-                toastContainer.querySelector('i').classList.replace('text-red-400', 'text-accent');
-                toastContainer.classList.replace('border-red-500/30', 'border-accent/30');
+                toastContainer.querySelector('i').classList.add('text-accent');
+                toastContainer.querySelector('i').classList.remove('text-red-400');
             }
 
             toast.classList.remove('translate-y-20', 'opacity-0');
