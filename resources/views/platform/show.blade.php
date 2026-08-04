@@ -14,5 +14,8 @@
             <p class="col-span-full text-center text-gray-400 py-20">No movies available on this platform yet.</p>
         @endforelse
     </div>
+    @if(isset($movies['total_pages']))
+        <x-pagination :currentPage="$movies['page'] ?? 1" :lastPage="$movies['total_pages'] ?? 1" />
+    @endif
 </div>
 @endsection

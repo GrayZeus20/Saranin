@@ -1,58 +1,261 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# 🚀 TesLaravel
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+**[EN]** The skeleton application for the Laravel framework.
 
-## About Laravel
+**[ID]** The skeleton application for the Laravel framework.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+[![Stack](https://img.shields.io/badge/PHP-2024-blue?logo=laravel)]()
+[![Framework](https://img.shields.io/badge/Framework-Laravel-purple)]()
+[![License](https://img.shields.io/badge/License-MIT-green)]()
+[![CI](https://img.shields.io/badge/CI Pipeline-Passing-brightgreen)]()
+[![Deploy](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel)]()
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## ✨ Features / Fitur
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+> **[EN]** Key features of this project.
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+> **[ID]** Fitur utama dari project ini.
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+- api module
 
-## Agentic Development
+---
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## 🏗️ Architecture / Arsitektur
 
-```bash
-composer require laravel/boost --dev
+**[EN]** Project structure overview.
 
-php artisan boost:install
+**[ID]** Ikhtisar struktur project.
+
+``
+.github/
+  workflows/
+api/
+  index.php
+app/
+  Http/
+  Models/
+  Providers/
+  Services/
+bootstrap/
+  cache/
+  app.php
+  providers.php
+config/
+  app.php
+  auth.php
+  cache.php
+  database.php
+  filesystems.php
+database/
+  factories/
+  migrations/
+  seeders/
+  .gitignore
+public/
+  build/
+  .htaccess
+  favicon.ico
+  index.php
+  robots.txt
+resources/
+  css/
+  js/
+  views/
+routes/
+  console.php
+  web.php
+storage/
+  app/
+  framework/
+  logs/
+tests/
+  Feature/
+  Unit/
+  TestCase.php
+.editorconfig
+.env
+.gitattributes
+.gitignore
+.npmrc
+.styleci.yml
+AGENTS.md
+artisan
+CHANGELOG.md
+``
+
+```mermaid
+flowchart TD
+    A[Root] --> B1[src]
+    B3[.github]
+    B4[workflows]
+    B5[api]
+    B6[index.php]
+    B7[app]
+    B8[Http]
+    B9[Models]
+    B10[Providers]
+    B11[bootstrap]
+    B12[cache]
+    B13[app.php]
+    B14[providers.php]
+    B15[config]
+    B16[app.php]
+    B17[auth.php]
+    B18[cache.php]
+    B19[database]
+    B20[factories]
+    B21[migrations]
+    B22[seeders]
+    B23[public]
+    B24[build]
+    B25[.htaccess]
+    B26[favicon.ico]
+    B27[resources]
+    B28[css]
+    B29[js]
+    B30[views]
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+---
 
-## Contributing
+## 🛠️ Tech Stack
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+| Component | Purpose |
+|-----------|---------|
+| PHP | Runtime |
+| `php` | - |
+| `guzzlehttp/guzzle` | - |
+| `laravel/framework` | - |
+| `laravel/tinker` | - |
 
-## Code of Conduct
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+---
 
-## Security Vulnerabilities
+## 🚀 Quick Start
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Prerequisites
 
-## License
+* [![Git](https://img.shields.io/badge/Git-2.x-orange?logo=git)](https://git-scm.com/)
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+* [![PHP](https://img.shields.io/badge/PHP-8.x-blue?logo=php)](https://www.php.net/)
+
+### Installation / Instalasi
+
+```bash
+# Clone
+git clone https://github.com/GrayZeus20/Movieflix.git
+cd TesLaravel
+
+# Install dependencies / Install dependensi
+composer install
+```
+
+### Development / Pengembangan
+
+```bash
+# Start dev server / Jalankan server development
+php artisan serve
+```
+
+### Build
+
+```bash
+composer install --no-dev
+```
+
+### Testing / Pengujian
+
+```bash
+php artisan test
+```
+
+---
+
+## ⚙️ Configuration / Konfigurasi
+
+**[EN]**
+
+Configure config.php or .env with your settings:
+
+**[ID]**
+
+Konfigurasikan config.php atau .env dengan pengaturan Anda:
+
+```bash
+
+# Edit config.php or .env file
+```
+
+---
+
+## 📜 Available Commands / Perintah Tersedia
+
+| Script | Command |
+|--------|---------|
+| `IsReadOnly` | `False` |
+| `IsFixedSize` | `False` |
+| `IsSynchronized` | `False` |
+| `Keys` | `dev post-create-project-cmd pre-package-uninstall test setup post-root-package-install post-update-cmd post-autoload-dump` |
+| `Values` | `System.Object[] System.Object[] System.Object[] System.Object[] System.Object[] System.Object[] System.Object[] System.Object[]` |
+| `SyncRoot` | `System.Collections.Hashtable` |
+| `Count` | `8` |
+
+
+---
+
+## 📚 Documentation / Dokumentasi
+
+<!-- Add documentation links here -->
+
+---
+
+## 🕒 Recent Changes / Perubahan Terbaru
+
+* Refactor code structure for improved readability and maintainability
+* feat: enhance theme variables and add transition effects for smoother UI
+* feat: add filter functionality and update layout for movie selection
+* update
+* fix: use secure_url for all form actions and API fetch to prevent mixed content
+* fix: force https in production, update APP_URL
+* docs: add AGENTS.md with Tailwind v4, Laravel, and deployment rules
+* fix: use inline width on scroll items to ensure 140px card size on home
+
+---
+
+## 🛡️ Security / Keamanan
+
+**[EN]**
+* API keys and secrets are never committed to Git.
+* All .env files are git-ignored.
+* Only .env.example with placeholder values is tracked.
+
+**[ID]**
+* API key dan rahasia tidak pernah di-commit ke Git.
+* Semua file .env di-gitignore.
+* Hanya .env.example dengan nilai placeholder yang di-track.
+
+---
+
+## 🤝 Contributing / Kontribusi
+
+1. Fork this repository
+2. Create a feature branch (git checkout -b feature/amazing-feature)
+3. Commit your changes (git commit -m 'Add amazing feature')
+4. Push to the branch (git push origin feature/amazing-feature)
+5. Open a Pull Request
+
+---
+
+## 👤 Author / Pengembang
+
+Dandi January
+
+---
+
+## 📄 License / Lisensi
+
+MIT © 2026
