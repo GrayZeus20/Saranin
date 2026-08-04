@@ -12,5 +12,6 @@
             <p class="col-span-full text-center text-gray-400 py-20">No movies found.</p>
         @endforelse
     </div>
+    <x-pagination :currentPage="$movies['page'] ?? 1" :lastPage="$movies['total_pages'] ?? 1" />
 </div>
 @endsection

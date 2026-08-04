@@ -25,9 +25,10 @@ class PlatformController extends Controller
         return view('platform.index', compact('platforms'));
     }
 
-    public function show(int $providerId)
+    public function show(int $providerId, Request $request)
     {
-        $movies = $this->tmdb->discoverByPlatform($providerId);
+        $page = (int) $request->query('page', 1);
+        $movies = $this->tmdb->discoverByPlatform($providerId, $page);
         $platform = $this->platforms[$providerId] ?? ['name' => 'Platform #' . $providerId, 'icon' => ''];
 
         return view('platform.show', ['movies' => $movies, 'platform' => $platform, 'providerId' => $providerId]);
