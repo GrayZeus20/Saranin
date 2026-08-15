@@ -344,19 +344,6 @@
             }, 3000);
         }
 
-        // Log view to server for statistics
-        function logView(tmdbId, title, type, genreIds, genreNames) {
-            fetch('{{ url(route("api.viewLog", [], false)) }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({ tmdb_id: tmdbId, title, type, genre_ids: genreIds, genre_names: genreNames })
-            }).catch(() => {});
-        }
-
         // Share
         function shareMovie(title, url) {
             if (navigator.share) {

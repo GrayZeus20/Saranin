@@ -22,25 +22,30 @@ class PlatformController extends Controller
     public function index()
     {
         $platforms = $this->platforms;
+
         return view('platform.index', compact('platforms'));
     }
 
     public function show(int $providerId, Request $request)
     {
-        $page = (int) $request->query('page', 1);
-        $movies = $this->tmdb->discoverByPlatform($providerId, $page);
-        $platform = $this->platforms[$providerId] ?? ['name' => 'Platform #' . $providerId, 'icon' => ''];
+        $movies = $this->tmdb->discoverByPlatform($providerId, $this->page($request));
+        $platform = $this->platforms[$providerId] ?? ['name' => 'Platform #'.$providerId, 'icon' => ''];
 
         return view('platform.show', ['movies' => $movies, 'platform' => $platform, 'providerId' => $providerId]);
     }
 
     public function filter(Request $request)
     {
-        $providers = $request->input('providers', []);
+        $validated = $request->validate([
+            'providers' => ['nullable', 'array', 'max:5'],
+            'providers.*' => ['integer', 'in:'.implode(',', array_keys($this->platforms))],
+        ]);
+
+        $providers = array_map('intval', $validated['providers'] ?? []);
         $allResults = [];
 
         foreach ($providers as $providerId) {
-            $data = $this->tmdb->discoverByPlatform((int) $providerId);
+            $data = $this->tmdb->discoverByPlatform($providerId);
             $platformName = $this->platforms[$providerId]['name'] ?? "Platform #$providerId";
             foreach (($data['results'] ?? []) as $movie) {
                 $movie['_platform'] = $platformName;
@@ -48,9 +53,9 @@ class PlatformController extends Controller
             }
         }
 
-        usort($allResults, fn($a, $b) => ($b['popularity'] ?? 0) <=> ($a['popularity'] ?? 0));
+        usort($allResults, fn ($a, $b) => ($b['popularity'] ?? 0) <=> ($a['popularity'] ?? 0));
 
-        $platformNames = array_map(fn($id) => $this->platforms[$id]['name'] ?? "Platform #$id", $providers);
+        $platformNames = array_map(fn (int $id) => $this->platforms[$id]['name'] ?? "Platform #$id", $providers);
 
         return view('platform.show', [
             'movies' => ['results' => $allResults],

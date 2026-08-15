@@ -19,7 +19,7 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
-        <env name="APP_KEY" value="base64:fglhJqbjTD92BuNK1+FXMJ4QI8Muz3CxC6EuWaiagnQ="/>
+        <env name="APP_KEY" value="base64:VAPTWpFaW1lN2VIGiKqhXS/MoWxqHxr5LqxxE35nJiY="/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
@@ -33,5 +33,6 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="TMDB_API_TOKEN" value="testing-token"/>
     </php>
 </phpunit>

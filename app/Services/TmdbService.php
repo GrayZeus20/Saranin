@@ -2,41 +2,56 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 
 class TmdbService
 {
     protected string $baseUrl;
+
     protected string $token;
+
     protected string $imageUrl;
 
     public function __construct()
     {
-        $this->baseUrl = config('services.tmdb.base_url');
-        $this->token = config('services.tmdb.token');
-        $this->imageUrl = config('services.tmdb.image_url');
+        $this->baseUrl = (string) config('services.tmdb.base_url');
+        $this->token = (string) config('services.tmdb.token');
+        $this->imageUrl = (string) config('services.tmdb.image_url');
     }
 
-    public function imageUrl(string $path, string $size = 'w500'): string
+    public function imageUrl(?string $path, string $size = 'w500'): string
     {
-        return $path ? "{$this->imageUrl}/{$size}{$path}" : 'https://via.placeholder.com/500x750?text=No+Image';
+        return $path ? "{$this->imageUrl}/{$size}{$path}" : asset('img/no-poster.svg');
     }
 
     public function get(string $endpoint, array $params = []): array
     {
-        $cacheKey = 'tmdb_' . md5($endpoint . json_encode($params));
+        $cacheKey = 'tmdb_'.md5($endpoint.json_encode($params));
+        $cached = Cache::get($cacheKey);
 
-        return Cache::remember($cacheKey, 3600, function () use ($endpoint, $params) {
-            $response = Http::withToken($this->token)
-                ->get("{$this->baseUrl}{$endpoint}", $params);
+        if (is_array($cached)) {
+            return $cached;
+        }
 
-            if ($response->failed()) {
-                return ['error' => true, 'message' => $response->body()];
-            }
+        $response = Http::withToken($this->token)
+            ->timeout(8)
+            ->retry(2, 200, throw: false)
+            ->get("{$this->baseUrl}{$endpoint}", $params);
 
-            return $response->json();
-        });
+        if ($response->failed()) {
+            return ['error' => true, 'status' => $response->status()];
+        }
+
+        $data = $response->json();
+
+        if (! is_array($data)) {
+            return ['error' => true, 'status' => $response->status()];
+        }
+
+        Cache::put($cacheKey, $data, now()->addHour());
+
+        return $data;
     }
 
     public function popularMovies(int $page = 1): array
@@ -128,10 +143,5 @@ class TmdbService
             'language' => 'id-ID',
             'sort_by' => 'popularity.desc',
         ]);
-    }
-
-    public function topRatedMoviesAllTime(int $page = 1): array
-    {
-        return $this->get('/movie/top_rated', ['page' => $page, 'language' => 'id-ID']);
     }
 }

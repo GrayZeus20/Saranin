@@ -22,22 +22,22 @@ class MovieController extends Controller
 
     public function trending(Request $request)
     {
-        $page = (int) $request->query('page', 1);
-        $trending = $this->tmdb->trendingMovies('week', $page);
+        $trending = $this->tmdb->trendingMovies('week', $this->page($request));
+
         return view('movie.trending', ['movies' => $trending]);
     }
 
     public function popular(Request $request)
     {
-        $page = (int) $request->query('page', 1);
-        $popular = $this->tmdb->popularMovies($page);
+        $popular = $this->tmdb->popularMovies($this->page($request));
+
         return view('movie.popular', ['movies' => $popular]);
     }
 
     public function topRated(Request $request)
     {
-        $page = (int) $request->query('page', 1);
-        $topRated = $this->tmdb->topRatedMovies($page);
+        $topRated = $this->tmdb->topRatedMovies($this->page($request));
+
         return view('movie.top-rated', ['movies' => $topRated]);
     }
 }
