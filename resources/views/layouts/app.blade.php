@@ -164,27 +164,27 @@
                 <div>
                     <h4 class="font-semibold text-slate-300 mb-3 text-sm uppercase tracking-wider">Browse</h4>
                     <ul class="space-y-2 text-sm">
-                        <li><a href="{{ route('movie.trending') }}" class="text-slate-400 hover:text-white transition-colors">Trending</a></li>
-                        <li><a href="{{ route('movie.popular') }}" class="text-slate-400 hover:text-white transition-colors">Popular</a></li>
-                        <li><a href="{{ route('movie.topRated') }}" class="text-slate-400 hover:text-white transition-colors">Top Rated</a></li>
-                        <li><a href="{{ route('calendar') }}" class="text-slate-400 hover:text-white transition-colors">Calendar</a></li>
+                        <li><a href="{{ route('movie.trending') }}" class="inline-block py-1.5 text-slate-400 hover:text-white transition-colors">Trending</a></li>
+                        <li><a href="{{ route('movie.popular') }}" class="inline-block py-1.5 text-slate-400 hover:text-white transition-colors">Popular</a></li>
+                        <li><a href="{{ route('movie.topRated') }}" class="inline-block py-1.5 text-slate-400 hover:text-white transition-colors">Top Rated</a></li>
+                        <li><a href="{{ route('calendar') }}" class="inline-block py-1.5 text-slate-400 hover:text-white transition-colors">Calendar</a></li>
                     </ul>
                 </div>
                 <div>
                     <h4 class="font-semibold text-slate-300 mb-3 text-sm uppercase tracking-wider">Platforms</h4>
                     <ul class="space-y-2 text-sm">
-                        <li><a href="{{ route('platform.show', 8) }}" class="text-slate-400 hover:text-white transition-colors">Netflix</a></li>
-                        <li><a href="{{ route('platform.show', 10) }}" class="text-slate-400 hover:text-white transition-colors">Amazon Prime</a></li>
-                        <li><a href="{{ route('platform.show', 384) }}" class="text-slate-400 hover:text-white transition-colors">HBO Max</a></li>
-                        <li><a href="{{ route('platform.show', 119) }}" class="text-slate-400 hover:text-white transition-colors">Disney+</a></li>
+                        <li><a href="{{ route('platform.show', 8) }}" class="inline-block py-1.5 text-slate-400 hover:text-white transition-colors">Netflix</a></li>
+                        <li><a href="{{ route('platform.show', 10) }}" class="inline-block py-1.5 text-slate-400 hover:text-white transition-colors">Amazon Prime</a></li>
+                        <li><a href="{{ route('platform.show', 384) }}" class="inline-block py-1.5 text-slate-400 hover:text-white transition-colors">HBO Max</a></li>
+                        <li><a href="{{ route('platform.show', 119) }}" class="inline-block py-1.5 text-slate-400 hover:text-white transition-colors">Disney+</a></li>
                     </ul>
                 </div>
                 <div>
                     <h4 class="font-semibold text-slate-300 mb-3 text-sm uppercase tracking-wider">More</h4>
                     <ul class="space-y-2 text-sm">
-                        <li><a href="{{ route('stats') }}" class="text-slate-400 hover:text-white transition-colors">Statistics</a></li>
-                        <li><a href="{{ route('genre.index') }}" class="text-slate-400 hover:text-white transition-colors">Genres</a></li>
-                        <li><a href="{{ route('watchlist') }}" class="text-slate-400 hover:text-white transition-colors">Watchlist</a></li>
+                        <li><a href="{{ route('stats') }}" class="inline-block py-1.5 text-slate-400 hover:text-white transition-colors">Statistics</a></li>
+                        <li><a href="{{ route('genre.index') }}" class="inline-block py-1.5 text-slate-400 hover:text-white transition-colors">Genres</a></li>
+                        <li><a href="{{ route('watchlist') }}" class="inline-block py-1.5 text-slate-400 hover:text-white transition-colors">Watchlist</a></li>
                     </ul>
                 </div>
             </div>
