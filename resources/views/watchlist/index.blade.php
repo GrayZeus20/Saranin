@@ -84,7 +84,7 @@
         if (removable) {
             const remove = document.createElement('button');
             remove.type = 'button';
-            remove.className = 'text-xs text-red-400 hover:text-red-300 mt-1 px-3 py-2 -ml-3 rounded-lg transition-colors';
+            remove.className = 'inline-flex items-center min-h-[44px] text-xs text-red-400 hover:text-red-300 px-3 -ml-3 rounded-lg transition-colors';
             remove.textContent = 'Remove';
             remove.setAttribute('aria-label', `Remove ${title} from watchlist`);
             remove.addEventListener('click', () => removeFromWatchlist(id, remove));

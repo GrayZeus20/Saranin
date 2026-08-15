@@ -14,7 +14,7 @@
         @empty
             <div class="col-span-full text-center py-20">
                 <p class="text-slate-400 text-lg mb-1">No movies available</p>
-                <p class="text-slate-500 text-sm">Check back later for new releases</p>
+                <p class="text-slate-400 text-sm">Check back later for new releases</p>
             </div>
         @endforelse
     </div>
