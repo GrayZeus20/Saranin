@@ -150,8 +150,10 @@
                 <div>
                     <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">You might also like</h3>
                     <div class="scroll-container">
-                        @foreach($movie['recommendations']['results'] as $rec)
-                            @include('partials.movie-card', ['movie' => $rec])
+                        @foreach(array_slice($movie['recommendations']['results'], 0, 15) as $rec)
+                            <div class="w-28 sm:w-32">
+                                @include('partials.movie-card', ['movie' => $rec])
+                            </div>
                         @endforeach
                     </div>
                 </div>
