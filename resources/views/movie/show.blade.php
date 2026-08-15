@@ -172,9 +172,9 @@
     }
 
     function watchlistAction(btn, id, title, poster) {
-        const removed = toggleWatchlist({id, title, poster});
+        const added = toggleWatchlist({id, title, poster});
         const text = btn.querySelector('span');
-        if (!removed) {
+        if (added) {
             text.textContent = 'Remove';
             btn.classList.remove('bg-accent', 'text-slate-900');
             btn.classList.add('bg-white/10', 'text-white');

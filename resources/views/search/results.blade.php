@@ -16,11 +16,14 @@
                    placeholder="Search movies & TV shows..." autofocus>
             <button type="submit" class="absolute right-2 top-1/2 -translate-y-1/2 bg-accent hover:bg-opacity-90 text-slate-900 px-4 py-2 rounded-xl text-sm font-semibold transition-all">Search</button>
         </div>
+        @error('q')
+            <p class="text-red-400 text-xs mt-2">{{ $message }}</p>
+        @enderror
     </form>
 
     @if($query)
         @if(!empty($results['results']))
-            <p class="text-slate-500 text-sm mb-5">{{ number_format($results['total_results'] ?? 0) }} results for "<span class="text-white">{{ $query }}</span>"</p>
+            <p class="text-slate-500 text-sm mb-5">{{ number_format(count($results['results'])) }} results for "<span class="text-white">{{ $query }}</span>"</p>
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
                 @foreach($results['results'] as $movie)
                     @include('partials.movie-card', ['movie' => $movie])

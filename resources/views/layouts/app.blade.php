@@ -225,28 +225,28 @@
                 html.classList.add('dark');
                 html.classList.remove('light');
                 localStorage.setItem('theme', 'dark');
-                sunIcon.classList.add('hidden');
-                moonIcon.classList.remove('hidden');
+                sunIcon?.classList.add('hidden');
+                moonIcon?.classList.remove('hidden');
             } else {
                 html.classList.remove('dark');
                 html.classList.add('light');
                 localStorage.setItem('theme', 'light');
-                sunIcon.classList.remove('hidden');
-                moonIcon.classList.add('hidden');
+                sunIcon?.classList.remove('hidden');
+                moonIcon?.classList.add('hidden');
             }
         }
 
         const savedTheme = localStorage.getItem('theme') || 'dark';
         setTheme(savedTheme === 'dark');
 
-        themeToggle.addEventListener('click', () => {
+        themeToggle?.addEventListener('click', () => {
             const isDark = html.classList.contains('dark');
             setTheme(!isDark);
         });
 
         // Mobile Menu
-        document.getElementById('mobile-menu-btn').addEventListener('click', () => {
-            document.getElementById('mobile-menu').classList.toggle('hidden');
+        document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {
+            document.getElementById('mobile-menu')?.classList.toggle('hidden');
         });
 
         // Keyboard Shortcuts
@@ -266,10 +266,10 @@
                     setTheme(!isDark);
                     break;
                 case '?':
-                    document.getElementById('shortcuts-modal').classList.toggle('hidden');
+                    document.getElementById('shortcuts-modal')?.classList.toggle('hidden');
                     break;
                 case 'Escape':
-                    document.getElementById('shortcuts-modal').classList.add('hidden');
+                    document.getElementById('shortcuts-modal')?.classList.add('hidden');
                     break;
             }
         });
@@ -277,6 +277,7 @@
         // Loading Overlay Logic
         window.addEventListener('load', () => {
             const loader = document.getElementById('loader');
+            if (! loader) return;
             loader.style.opacity = '0';
             setTimeout(() => loader.style.display = 'none', 500);
         });
@@ -285,6 +286,7 @@
             link.addEventListener('click', (e) => {
                 if (link.hostname === window.location.hostname && !link.getAttribute('href').startsWith('#')) {
                     const bar = document.getElementById('progress');
+                    if (! bar) return;
                     bar.style.width = '70%';
                     setTimeout(() => { bar.style.width = '100%'; }, 200);
                     setTimeout(() => { bar.style.width = '0%'; }, 800);
@@ -301,7 +303,7 @@
             localStorage.setItem('recentlyViewed', JSON.stringify(recent));
         }
 
-        // Watchlist (localStorage)
+        // Watchlist (localStorage). Returns true when the movie was added.
         function toggleWatchlist(movie) {
             let watchlist = JSON.parse(localStorage.getItem('watchlist') || '[]');
             const exists = watchlist.find(m => m.id === movie.id);
@@ -323,16 +325,17 @@
         function showToast(message, type = 'success') {
             const toast = document.getElementById('toast');
             const toastMsg = document.getElementById('toast-message');
-            const toastContainer = toast.querySelector('div');
+            if (! toast || ! toastMsg) return;
+            const icon = toast.querySelector('div i');
 
             toastMsg.textContent = message;
 
             if (type === 'error') {
-                toastContainer.querySelector('i').classList.add('text-red-400');
-                toastContainer.querySelector('i').classList.remove('text-accent');
+                icon?.classList.add('text-red-400');
+                icon?.classList.remove('text-accent');
             } else {
-                toastContainer.querySelector('i').classList.add('text-accent');
-                toastContainer.querySelector('i').classList.remove('text-red-400');
+                icon?.classList.add('text-accent');
+                icon?.classList.remove('text-red-400');
             }
 
             toast.classList.remove('translate-y-20', 'opacity-0');
