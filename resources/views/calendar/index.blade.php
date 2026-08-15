@@ -27,7 +27,7 @@
                         <h3 class="text-sm font-semibold text-slate-300 group-hover:text-white truncate transition-colors">{{ $movie['title'] }}</h3>
                         <p class="text-xs text-slate-400 mt-0.5">{{ $movie['release_date'] ?? 'TBA' }}</p>
                         @if(!empty($movie['overview']))
-                        <p class="text-xs text-slate-500 line-clamp-2 mt-1">{{ $movie['overview'] }}</p>
+                        <p class="text-xs text-slate-400 line-clamp-2 mt-1">{{ $movie['overview'] }}</p>
                         @endif
                     </div>
                 </a>
@@ -54,7 +54,7 @@
                         <h3 class="text-sm font-semibold text-slate-300 group-hover:text-white truncate transition-colors">{{ $movie['title'] }}</h3>
                         <p class="text-xs text-slate-400 mt-0.5">{{ $movie['release_date'] ?? 'TBA' }}</p>
                         @if(!empty($movie['overview']))
-                        <p class="text-xs text-slate-500 line-clamp-2 mt-1">{{ $movie['overview'] }}</p>
+                        <p class="text-xs text-slate-400 line-clamp-2 mt-1">{{ $movie['overview'] }}</p>
                         @endif
                     </div>
                 </a>

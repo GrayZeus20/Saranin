@@ -99,7 +99,7 @@
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center gap-10">
                     <a href="{{ route('home') }}" class="text-accent font-bold text-xl logo tracking-tight hover:opacity-80 transition-opacity">MovieFlix</a>
-                    <div class="hidden md:flex items-center gap-1">
+                    <div class="hidden lg:flex items-center gap-1">
                         <a href="{{ route('home') }}" class="px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all">Home</a>
                         <a href="{{ route('movie.trending') }}" class="px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all">Trending</a>
                         <a href="{{ route('movie.popular') }}" class="px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all">Popular</a>
@@ -109,20 +109,20 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <form action="{{ url(route('search', [], false)) }}" method="GET" class="relative hidden sm:block">
+                    <form action="{{ url(route('search', [], false)) }}" method="GET" class="relative hidden lg:block">
                         <input type="text" name="q" value="{{ request('q') }}" placeholder="Search..."
-                            class="bg-white/5 text-white placeholder-slate-500 rounded-xl px-4 py-2 pl-9 w-44 focus:w-60 transition-all duration-300 focus:outline-none focus:ring-1 focus:ring-accent/40 focus:bg-white/10 text-sm border border-white/5">
+                            class="bg-white/5 text-white placeholder-slate-400 rounded-xl px-4 py-2 pl-9 w-44 focus:w-60 transition-all duration-300 focus:outline-none focus:ring-1 focus:ring-accent/40 focus:bg-white/10 text-sm border border-white/5">
                         <svg class="absolute left-3 top-2.5 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                         </svg>
                     </form>
-                    <a href="{{ route('watchlist') }}" class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all" title="Watchlist">
+                    <a href="{{ route('watchlist') }}" class="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all" title="Watchlist">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
                     </a>
-                    <a href="{{ route('calendar') }}" class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all" title="Calendar">
+                    <a href="{{ route('calendar') }}" class="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all" title="Calendar">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                     </a>
-                    <button id="mobile-menu-btn" aria-label="Open menu" class="md:hidden p-3 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all">
+                    <button id="mobile-menu-btn" aria-label="Open menu" class="lg:hidden p-3 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                         </svg>
@@ -130,7 +130,7 @@
                 </div>
             </div>
         </div>
-        <div id="mobile-menu" class="hidden md:hidden bg-slate-950/95 backdrop-blur-xl border-t border-white/5">
+        <div id="mobile-menu" class="hidden lg:hidden bg-slate-950/95 backdrop-blur-xl border-t border-white/5">
             <div class="px-4 py-3 space-y-1">
                 <a href="{{ route('home') }}" class="block py-2.5 px-3 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all text-sm">Home</a>
                 <a href="{{ route('movie.trending') }}" class="block py-2.5 px-3 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all text-sm">Trending</a>
@@ -142,7 +142,7 @@
                 <a href="{{ route('watchlist') }}" class="block py-2.5 px-3 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all text-sm">Watchlist</a>
                 <a href="{{ route('stats') }}" class="block py-2.5 px-3 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all text-sm">Stats</a>
                 <form action="{{ url(route('search', [], false)) }}" method="GET" class="pt-2">
-                    <input type="text" name="q" placeholder="Search movies..." class="w-full bg-white/5 text-white placeholder-slate-500 rounded-xl px-4 py-2.5 text-sm border border-white/5">
+                    <input type="text" name="q" placeholder="Search movies..." class="w-full bg-white/5 text-white placeholder-slate-400 rounded-xl px-4 py-2.5 text-sm border border-white/5">
                 </form>
             </div>
         </div>
@@ -189,8 +189,8 @@
                 </div>
             </div>
             <div class="border-t border-white/5 pt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-                <p class="text-slate-500 text-xs">&copy; {{ date('Y') }} MovieFlix</p>
-                <p class="text-slate-500 text-xs">Data by <a href="https://www.themoviedb.org/" target="_blank" class="text-slate-400 hover:text-white transition-colors">The Movie Database</a></p>
+                <p class="text-slate-400 text-xs">&copy; {{ date('Y') }} MovieFlix</p>
+                <p class="text-slate-400 text-xs">Data by <a href="https://www.themoviedb.org/" target="_blank" class="text-slate-400 hover:text-white transition-colors">The Movie Database</a></p>
             </div>
         </div>
     </footer>
