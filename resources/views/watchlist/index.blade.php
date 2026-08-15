@@ -82,16 +82,37 @@
         card.append(link, caption);
 
         if (removable) {
-            const remove = document.createElement('button');
-            remove.type = 'button';
-            remove.className = 'inline-flex items-center min-h-[44px] text-xs text-red-400 hover:text-red-300 px-3 -ml-3 rounded-lg transition-colors';
-            remove.textContent = 'Remove';
-            remove.setAttribute('aria-label', `Remove ${title} from watchlist`);
-            remove.addEventListener('click', () => removeFromWatchlist(id, remove));
-            card.append(remove);
+            card.append(buildRemoveButton(id, title));
         }
 
         return card;
+    }
+
+    function buildRemoveButton(id, title) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'absolute top-2 right-2 z-10 flex items-center justify-center w-11 h-11 rounded-xl bg-slate-950/70 backdrop-blur-sm text-slate-200 hover:bg-red-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors';
+        button.setAttribute('aria-label', `Remove ${title} from watchlist`);
+        button.title = 'Remove from watchlist';
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '2');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('class', 'w-5 h-5');
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('stroke-linecap', 'round');
+        path.setAttribute('stroke-linejoin', 'round');
+        path.setAttribute('d', 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16');
+
+        svg.append(path);
+        button.append(svg);
+        button.addEventListener('click', () => removeFromWatchlist(id, button));
+
+        return button;
     }
 
     function removeFromWatchlist(id, btn) {

@@ -18,7 +18,7 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="flex flex-col md:flex-row gap-8 lg:gap-10">
             {{-- Poster --}}
-            <div class="flex-shrink-0 w-full md:w-[280px] lg:w-[300px]">
+            <div class="flex-shrink-0 w-40 sm:w-52 md:w-[280px] lg:w-[300px]">
                 <img src="{{ app(App\Services\TmdbService::class)->imageUrl($movie['poster_path'] ?? '') }}"
                      alt="{{ $movie['title'] ?? '' }}"
                      class="w-full rounded-2xl shadow-2xl shadow-black/40 border border-white/5"
