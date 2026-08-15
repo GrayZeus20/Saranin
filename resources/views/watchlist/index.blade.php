@@ -37,27 +37,57 @@
     function renderMovieCards(containerId, movies, emptyMsg) {
         const container = document.getElementById(containerId);
         if (!container) return;
+        container.textContent = '';
+
         if (!movies || movies.length === 0) {
-            container.innerHTML = `<p class="col-span-full text-center text-slate-500 py-12 text-sm">${emptyMsg}</p>`;
+            const empty = document.createElement('p');
+            empty.className = 'col-span-full text-center text-slate-500 py-12 text-sm';
+            empty.textContent = emptyMsg;
+            container.append(empty);
             return;
         }
-        container.innerHTML = movies.map(m => `
-            <div class="movie-card fade-in">
-                <a href="/movie/${m.id}"
-                   onclick="addRecentlyViewed(${JSON.stringify(m).replace(/"/g,'&quot;')})"
-                   class="block">
-                    <div class="relative aspect-[2/3] rounded-2xl overflow-hidden bg-slate-800/50 border border-white/5 shadow-lg shadow-black/20">
-                        <img src="${m.poster || '/img/no-poster.svg'}"
-                             alt="${m.title}"
-                             loading="lazy"
-                             class="w-full h-full object-cover transition-transform duration-700 ease-out hover:scale-[1.06]"
-                             onerror="this.src='/img/no-poster.svg'">
-                    </div>
-                </a>
-                <p class="mt-2.5 text-sm font-semibold text-slate-200 truncate">${m.title}</p>
-                <button onclick="removeFromWatchlist(${m.id}, this)" class="text-xs text-red-400 hover:text-red-300 mt-1 transition-colors">Remove</button>
-            </div>
-        `).join('');
+
+        movies.forEach(m => container.append(buildMovieCard(m)));
+    }
+
+    function buildMovieCard(m) {
+        const id = Number(m.id);
+        const title = String(m.title ?? '');
+        const poster = String(m.poster ?? '');
+
+        const card = document.createElement('div');
+        card.className = 'movie-card fade-in';
+
+        const link = document.createElement('a');
+        link.href = `/movie/${id}`;
+        link.className = 'block';
+        link.addEventListener('click', () => addRecentlyViewed({id, title, poster}));
+
+        const frame = document.createElement('div');
+        frame.className = 'relative aspect-[2/3] rounded-2xl overflow-hidden bg-slate-800/50 border border-white/5 shadow-lg shadow-black/20';
+
+        const img = document.createElement('img');
+        img.src = poster.startsWith('http') || poster.startsWith('/') ? poster : '/img/no-poster.svg';
+        img.alt = title;
+        img.loading = 'lazy';
+        img.className = 'w-full h-full object-cover transition-transform duration-700 ease-out hover:scale-[1.06]';
+        img.addEventListener('error', () => { img.src = '/img/no-poster.svg'; });
+
+        const caption = document.createElement('p');
+        caption.className = 'mt-2.5 text-sm font-semibold text-slate-200 truncate';
+        caption.textContent = title;
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'text-xs text-red-400 hover:text-red-300 mt-1 transition-colors';
+        remove.textContent = 'Remove';
+        remove.addEventListener('click', () => removeFromWatchlist(id, remove));
+
+        frame.append(img);
+        link.append(frame);
+        card.append(link, caption, remove);
+
+        return card;
     }
 
     function removeFromWatchlist(id, btn) {
@@ -79,7 +109,7 @@
         const grid = document.getElementById('watchlist-grid');
         if (watchlist.length === 0) {
             empty.classList.remove('hidden');
-            grid.innerHTML = '';
+            grid.textContent = '';
         } else {
             empty.classList.add('hidden');
         }
