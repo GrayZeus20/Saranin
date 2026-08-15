@@ -150,30 +150,6 @@
 
 @push('scripts')
 <script>
-    const WL_ICON_ADD = 'M12 4v16m8-8H4';
-    const WL_ICON_IN_LIST = 'M5 13l4 4L19 7';
-
-    function renderWatchlistButton(btn, inList) {
-        if (! btn) return;
-        btn.querySelector('span').textContent = inList ? 'Remove' : 'Watchlist';
-        btn.querySelector('[data-wl-icon]')?.setAttribute('d', inList ? WL_ICON_IN_LIST : WL_ICON_ADD);
-        btn.classList.toggle('bg-white/10', inList);
-        btn.classList.toggle('text-white', inList);
-        btn.classList.toggle('bg-accent', ! inList);
-        btn.classList.toggle('text-slate-900', ! inList);
-    }
-
-    renderWatchlistButton(
-        document.getElementById('wl-btn-{{ $movie['id'] }}'),
-        isInWatchlist({{ $movie['id'] }})
-    );
-
-    function watchlistAction(btn, id, title, poster) {
-        const added = toggleWatchlist({id, title, poster});
-        renderWatchlistButton(btn, added);
-        showToast(added ? 'Added to watchlist' : 'Removed from watchlist');
-    }
-
     addRecentlyViewed({
         id: {{ $movie['id'] }},
         title: @js($movie['title'] ?? ''),
