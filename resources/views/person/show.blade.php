@@ -9,7 +9,7 @@
             <img src="{{ app(App\Services\TmdbService::class)->imageUrl($person['profile_path'] ?? '', 'w500') }}"
                  alt="{{ $person['name'] }}"
                  class="w-full rounded-2xl shadow-2xl shadow-black/40 border border-white/5"
-                 onerror="this.src='https://via.placeholder.com/300x450?text=No+Photo'">
+                 onerror="this.src='/img/no-poster.svg'">
         </div>
         <div class="flex-1">
             <h1 class="text-3xl md:text-5xl font-bold text-white mb-4 tracking-tight">{{ $person['name'] }}</h1>
@@ -49,7 +49,7 @@
                              alt="{{ $credit['title'] }}"
                              class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                              loading="lazy"
-                             onerror="this.src='https://via.placeholder.com/140x210?text=No+Poster'">
+                             onerror="this.src='/img/no-poster.svg'">
                     </div>
                     <p class="text-xs font-semibold text-slate-300 truncate group-hover:text-white transition-colors">{{ $credit['title'] }}</p>
                     <p class="text-[10px] text-slate-600 truncate">{{ $credit['character'] ?? '' }}</p>

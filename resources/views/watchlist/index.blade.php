@@ -47,11 +47,11 @@
                    onclick="addRecentlyViewed(${JSON.stringify(m).replace(/"/g,'&quot;')})"
                    class="block">
                     <div class="relative aspect-[2/3] rounded-2xl overflow-hidden bg-slate-800/50 border border-white/5 shadow-lg shadow-black/20">
-                        <img src="${m.poster || 'https://via.placeholder.com/300x450?text=No+Poster'}"
+                        <img src="${m.poster || '/img/no-poster.svg'}"
                              alt="${m.title}"
                              loading="lazy"
                              class="w-full h-full object-cover transition-transform duration-700 ease-out hover:scale-[1.06]"
-                             onerror="this.src='https://via.placeholder.com/300x450?text=No+Poster'">
+                             onerror="this.src='/img/no-poster.svg'">
                     </div>
                 </a>
                 <p class="mt-2.5 text-sm font-semibold text-slate-200 truncate">${m.title}</p>

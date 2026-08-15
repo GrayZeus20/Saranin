@@ -22,7 +22,7 @@
                          alt="{{ $movie['title'] }}"
                          class="w-14 h-[84px] rounded-lg object-cover flex-shrink-0 border border-white/5"
                          loading="lazy"
-                         onerror="this.src='https://via.placeholder.com/64x96?text=N/A'">
+                         onerror="this.src='/img/no-poster.svg'">
                     <div class="flex-1 min-w-0">
                         <h3 class="text-sm font-semibold text-slate-300 group-hover:text-white truncate transition-colors">{{ $movie['title'] }}</h3>
                         <p class="text-xs text-slate-500 mt-0.5">{{ $movie['release_date'] ?? 'TBA' }}</p>
@@ -49,7 +49,7 @@
                          alt="{{ $movie['title'] }}"
                          class="w-14 h-[84px] rounded-lg object-cover flex-shrink-0 border border-white/5"
                          loading="lazy"
-                         onerror="this.src='https://via.placeholder.com/64x96?text=N/A'">
+                         onerror="this.src='/img/no-poster.svg'">
                     <div class="flex-1 min-w-0">
                         <h3 class="text-sm font-semibold text-slate-300 group-hover:text-white truncate transition-colors">{{ $movie['title'] }}</h3>
                         <p class="text-xs text-slate-500 mt-0.5">{{ $movie['release_date'] ?? 'TBA' }}</p>

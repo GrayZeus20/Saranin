@@ -12,13 +12,13 @@ class GenreController extends Controller
     public function index()
     {
         $genres = $this->tmdb->genres();
+
         return view('genre.index', compact('genres'));
     }
 
     public function show(int $id, Request $request)
     {
-        $page = (int) $request->query('page', 1);
-        $movies = $this->tmdb->discoverByGenre($id, $page);
+        $movies = $this->tmdb->discoverByGenre($id, $this->page($request));
         $genres = $this->tmdb->genres();
         $genreName = '';
         foreach (($genres['genres'] ?? []) as $g) {

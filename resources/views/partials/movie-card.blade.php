@@ -1,13 +1,13 @@
 <div class="movie-card group fade-in" x-data>
     <a href="{{ route('movie.show', $movie['id']) }}"
-       onclick="addRecentlyViewed({id:{{ $movie['id'] }},title:'{{ addslashes($movie['title'] ?? $movie['name'] ?? '') }}',poster:'{{ app(\App\Services\TmdbService::class)->imageUrl($movie['poster_path'] ?? '') }}'})"
+       onclick="addRecentlyViewed({id: {{ (int) $movie['id'] }}, title: @js($movie['title'] ?? $movie['name'] ?? ''), poster: @js(app(\App\Services\TmdbService::class)->imageUrl($movie['poster_path'] ?? null))})"
        class="block">
         <div class="relative aspect-[2/3] rounded-2xl overflow-hidden bg-slate-800/50 border border-white/5 shadow-lg shadow-black/20 transition-all duration-500 group-hover:border-accent/30 group-hover:shadow-xl group-hover:shadow-black/40 group-hover:-translate-y-1">
             <img src="{{ app(App\Services\TmdbService::class)->imageUrl($movie['poster_path'] ?? '') }}"
                  alt="{{ $movie['title'] ?? $movie['name'] ?? '' }}"
                  loading="lazy"
                  class="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.06]"
-                 onerror="this.src='https://via.placeholder.com/300x450?text=No+Poster'">
+                 onerror="this.src='/img/no-poster.svg'">
             <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3.5">
                 @if(!empty($movie['vote_average']))
                 <span class="text-xs font-semibold text-slate-100 flex items-center gap-1.5 mb-1">

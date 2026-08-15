@@ -8,7 +8,7 @@
 
 ## Laravel Environment (Railway/Vercel)
 - Hardcode `SESSION_DRIVER`, `CACHE_STORE`, and `QUEUE_CONNECTION` to `file` or `sync` in `config/` files if no database is used.
-- Always provide fallback defaults in `config/services.php` for API keys to prevent `null` type errors.
+- Never commit real API keys or `APP_KEY`; `config/` must read them from `env()` with empty-string (not real) fallbacks so a missing key cannot cause a `null` type error.
 
 ## UI/UX Design Principles
 - **Consistency**: Ensure card sizes are uniform across pages.
