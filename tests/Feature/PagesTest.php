@@ -74,6 +74,16 @@ class PagesTest extends TestCase
         $this->get('/movie/999999999')->assertNotFound();
     }
 
+    public function test_unknown_url_renders_the_branded_404_page(): void
+    {
+        Http::preventStrayRequests();
+
+        $this->get('/no-such-page')
+            ->assertNotFound()
+            ->assertSee('Page not found')
+            ->assertSee('Back to home');
+    }
+
     public function test_search_requires_a_short_query(): void
     {
         $this->fakeTmdb();

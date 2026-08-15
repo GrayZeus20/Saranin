@@ -6,7 +6,7 @@
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="mb-8">
         <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">Release calendar</h1>
-        <p class="text-slate-500 text-sm mt-1">What's playing and what's coming</p>
+        <p class="text-slate-400 text-sm mt-1">What's playing and what's coming</p>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -25,14 +25,14 @@
                          onerror="this.src='/img/no-poster.svg'">
                     <div class="flex-1 min-w-0">
                         <h3 class="text-sm font-semibold text-slate-300 group-hover:text-white truncate transition-colors">{{ $movie['title'] }}</h3>
-                        <p class="text-xs text-slate-500 mt-0.5">{{ $movie['release_date'] ?? 'TBA' }}</p>
+                        <p class="text-xs text-slate-400 mt-0.5">{{ $movie['release_date'] ?? 'TBA' }}</p>
                         @if(!empty($movie['overview']))
-                        <p class="text-xs text-slate-600 line-clamp-2 mt-1">{{ $movie['overview'] }}</p>
+                        <p class="text-xs text-slate-500 line-clamp-2 mt-1">{{ $movie['overview'] }}</p>
                         @endif
                     </div>
                 </a>
                 @empty
-                <p class="text-slate-500 text-sm py-4">No movies currently playing.</p>
+                <p class="text-slate-400 text-sm py-4">No movies currently playing.</p>
                 @endforelse
             </div>
         </section>
@@ -52,14 +52,14 @@
                          onerror="this.src='/img/no-poster.svg'">
                     <div class="flex-1 min-w-0">
                         <h3 class="text-sm font-semibold text-slate-300 group-hover:text-white truncate transition-colors">{{ $movie['title'] }}</h3>
-                        <p class="text-xs text-slate-500 mt-0.5">{{ $movie['release_date'] ?? 'TBA' }}</p>
+                        <p class="text-xs text-slate-400 mt-0.5">{{ $movie['release_date'] ?? 'TBA' }}</p>
                         @if(!empty($movie['overview']))
-                        <p class="text-xs text-slate-600 line-clamp-2 mt-1">{{ $movie['overview'] }}</p>
+                        <p class="text-xs text-slate-500 line-clamp-2 mt-1">{{ $movie['overview'] }}</p>
                         @endif
                     </div>
                 </a>
                 @empty
-                <p class="text-slate-500 text-sm py-4">No upcoming movies found.</p>
+                <p class="text-slate-400 text-sm py-4">No upcoming movies found.</p>
                 @endforelse
             </div>
         </section>

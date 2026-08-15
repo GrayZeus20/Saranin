@@ -16,7 +16,7 @@
                  class="bg-slate-900/95 backdrop-blur-xl p-7 rounded-3xl w-full max-w-md border border-white/10 shadow-2xl shadow-black/50">
                 <div class="flex justify-between items-center mb-5">
                     <h2 class="text-xl font-bold text-white">Choose platforms</h2>
-                    <button @click="showFilter = false" class="text-slate-500 hover:text-white transition-colors"><i class="fas fa-times"></i></button>
+                    <button @click="showFilter = false" class="text-slate-400 hover:text-white transition-colors"><i class="fas fa-times"></i></button>
                 </div>
                 <form action="{{ route('platform.filter') }}" method="GET" class="space-y-3">
                     @foreach([8 => 'Netflix', 119 => 'Disney+', 384 => 'HBO Max', 10 => 'Prime Video'] as $id => $name)
@@ -68,7 +68,7 @@
             <div class="flex items-end justify-between mb-5">
                 <div>
                     <h2 class="text-2xl md:text-3xl font-bold text-white tracking-tight">{{ $section['title'] }}</h2>
-                    <p class="text-slate-500 text-sm mt-1">{{ $section['subtitle'] }}</p>
+                    <p class="text-slate-400 text-sm mt-1">{{ $section['subtitle'] }}</p>
                 </div>
                 <a href="{{ $section['link'] }}" class="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white font-medium transition-colors">
                     See all
@@ -86,7 +86,7 @@
         {{-- FILTER CTA --}}
         <section class="rounded-3xl border border-white/5 bg-gradient-to-br from-slate-900/80 to-slate-950 p-8 md:p-12 text-center">
             <h2 class="text-2xl md:text-3xl font-bold text-white mb-3 tracking-tight">Not sure where to start?</h2>
-            <p class="text-slate-500 max-w-md mx-auto mb-6">Filter movies by the streaming platforms you already have.</p>
+            <p class="text-slate-400 max-w-md mx-auto mb-6">Filter movies by the streaming platforms you already have.</p>
             <button @click="showFilter = true" class="inline-flex items-center gap-2 bg-white/10 hover:bg-accent hover:text-slate-900 px-6 py-3 rounded-full font-semibold transition-all">
                 <i class="fas fa-filter text-sm"></i> Filter platforms
             </button>
