@@ -71,13 +71,17 @@
                 {{-- Overview with enhanced typography --}}
                 <div class="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 mb-8">
                     <h3 class="text-sm font-semibold text-accent uppercase tracking-wider mb-3">Synopsis</h3>
-                    <p class="text-slate-300 leading-relaxed text-base" style="text-align: justify;">{{ $movie['overview'] ?? 'No overview available.' }}</p>
+                    @if(!empty($movie['overview']))
+                    <p class="text-slate-300 leading-relaxed text-base" style="text-align: justify;">{{ $movie['overview'] }}</p>
+                    @else
+                    <p class="text-slate-500 italic">Synopsis not available</p>
+                    @endif
                 </div>
 
                 {{-- Platforms with enhanced styling --}}
-                @if(!empty($movie['watch/providers']['results']['ID']['flatrate']))
                 <div class="mb-8">
                     <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Available on</h3>
+                    @if(!empty($movie['watch/providers']['results']['ID']['flatrate']))
                     <div class="flex flex-wrap gap-3">
                         @foreach($movie['watch/providers']['results']['ID']['flatrate'] as $provider)
                         <div class="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-accent/30 rounded-xl px-4 py-3 transition-all duration-300">
@@ -89,29 +93,35 @@
                         </div>
                         @endforeach
                     </div>
+                    @else
+                    <p class="text-slate-500 italic">Streaming information not available</p>
+                    @endif
                 </div>
-                @endif
 
                 {{-- Trailer with enhanced styling --}}
-                @if(!empty($movie['videos']['results']))
-                @php $trailer = collect($movie['videos']['results'])->firstWhere('type', 'Trailer') ?? $movie['videos']['results'][0] @endphp
-                @if($trailer && $trailer['site'] === 'YouTube')
                 <div class="mb-8">
                     <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Trailer</h3>
+                    @if(!empty($movie['videos']['results']))
+                    @php $trailer = collect($movie['videos']['results'])->firstWhere('type', 'Trailer') ?? $movie['videos']['results'][0] @endphp
+                    @if($trailer && $trailer['site'] === 'YouTube')
                     <div class="aspect-video rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-black/50">
                         <iframe src="https://www.youtube.com/embed/{{ $trailer['key'] }}"
                                 class="w-full h-full"
                                 allowfullscreen
                                 loading="lazy"></iframe>
                     </div>
+                    @else
+                    <p class="text-slate-500 italic">Trailer not available</p>
+                    @endif
+                    @else
+                    <p class="text-slate-500 italic">Trailer not available</p>
+                    @endif
                 </div>
-                @endif
-                @endif
 
                 {{-- Cast with enhanced styling --}}
-                @if(!empty($movie['credits']['cast']))
                 <div class="mb-8">
                     <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Cast</h3>
+                    @if(!empty($movie['credits']['cast']))
                     <div class="scroll-container">
                         @foreach(array_slice($movie['credits']['cast'], 0, 15) as $cast)
                         <a href="{{ route('person.show', $cast['id']) }}" class="group w-[120px]">
@@ -127,13 +137,15 @@
                         </a>
                         @endforeach
                     </div>
+                    @else
+                    <p class="text-slate-500 italic">Cast information not available</p>
+                    @endif
                 </div>
-                @endif
 
                 {{-- Crew with enhanced styling --}}
-                @if(!empty($movie['credits']['crew']))
                 <div class="mb-8">
                     <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Crew</h3>
+                    @if(!empty($movie['credits']['crew']))
                     <div class="flex flex-wrap gap-x-6 gap-y-3">
                         @foreach(array_slice($movie['credits']['crew'], 0, 10) as $crew)
                         <a href="{{ route('person.show', $crew['id']) }}" class="text-sm text-slate-400 hover:text-white transition-colors">
@@ -142,13 +154,15 @@
                         </a>
                         @endforeach
                     </div>
+                    @else
+                    <p class="text-slate-500 italic">Crew information not available</p>
+                    @endif
                 </div>
-                @endif
 
                 {{-- Recommendations with enhanced styling --}}
-                @if(!empty($movie['recommendations']['results']))
                 <div>
                     <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">You might also like</h3>
+                    @if(!empty($movie['recommendations']['results']))
                     <div class="scroll-container">
                         @foreach(array_slice($movie['recommendations']['results'], 0, 15) as $rec)
                             <div class="w-28 sm:w-[120px]">
@@ -156,8 +170,10 @@
                             </div>
                         @endforeach
                     </div>
+                    @else
+                    <p class="text-slate-500 italic">Recommendations not available</p>
+                    @endif
                 </div>
-                @endif
             </div>
         </div>
     </div>
