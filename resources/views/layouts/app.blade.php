@@ -274,6 +274,100 @@
             }
         });
 
+        // Horizontal rails: arrow buttons + drag to scroll
+        function buildRailArrow(direction) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'absolute top-[38%] -translate-y-1/2 z-20 hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-slate-950/85 border border-white/10 text-white shadow-lg shadow-black/40 backdrop-blur-sm hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all disabled:opacity-0 disabled:pointer-events-none '
+                + (direction === 'prev' ? 'left-0 -ml-1' : 'right-0 -mr-1');
+            button.setAttribute('aria-label', direction === 'prev' ? 'Scroll left' : 'Scroll right');
+
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('fill', 'none');
+            svg.setAttribute('stroke', 'currentColor');
+            svg.setAttribute('stroke-width', '2.5');
+            svg.setAttribute('aria-hidden', 'true');
+            svg.setAttribute('class', 'w-5 h-5');
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('stroke-linecap', 'round');
+            path.setAttribute('stroke-linejoin', 'round');
+            path.setAttribute('d', direction === 'prev' ? 'M15 19l-7-7 7-7' : 'M9 5l7 7-7 7');
+
+            svg.append(path);
+            button.append(svg);
+
+            return button;
+        }
+
+        function enhanceRail(rail) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'relative';
+            rail.parentNode.insertBefore(wrapper, rail);
+            wrapper.append(rail);
+
+            rail.tabIndex = 0;
+            rail.setAttribute('role', 'group');
+
+            const prev = buildRailArrow('prev');
+            const next = buildRailArrow('next');
+            wrapper.append(prev, next);
+
+            const step = () => Math.max(rail.clientWidth * 0.8, 200);
+            prev.addEventListener('click', () => rail.scrollBy({left: -step(), behavior: 'smooth'}));
+            next.addEventListener('click', () => rail.scrollBy({left: step(), behavior: 'smooth'}));
+
+            const sync = () => {
+                const max = rail.scrollWidth - rail.clientWidth - 2;
+                prev.disabled = rail.scrollLeft <= 2;
+                next.disabled = rail.scrollLeft >= max;
+            };
+
+            rail.addEventListener('scroll', sync, {passive: true});
+            window.addEventListener('resize', sync);
+            sync();
+
+            let down = false;
+            let startX = 0;
+            let startScroll = 0;
+            let dragged = false;
+
+            rail.addEventListener('pointerdown', (e) => {
+                if (e.pointerType !== 'mouse') return;
+                down = true;
+                dragged = false;
+                startX = e.clientX;
+                startScroll = rail.scrollLeft;
+            });
+
+            rail.addEventListener('pointermove', (e) => {
+                if (! down) return;
+                const delta = e.clientX - startX;
+                if (Math.abs(delta) > 5) {
+                    dragged = true;
+                    rail.style.scrollSnapType = 'none';
+                    rail.scrollLeft = startScroll - delta;
+                }
+            });
+
+            const endDrag = () => {
+                down = false;
+                rail.style.scrollSnapType = '';
+            };
+
+            rail.addEventListener('pointerup', endDrag);
+            rail.addEventListener('pointerleave', endDrag);
+            rail.addEventListener('click', (e) => {
+                if (dragged) {
+                    e.preventDefault();
+                    dragged = false;
+                }
+            }, true);
+        }
+
+        document.querySelectorAll('.scroll-container').forEach(enhanceRail);
+
         // Loading Overlay Logic
         window.addEventListener('load', () => {
             const loader = document.getElementById('loader');
