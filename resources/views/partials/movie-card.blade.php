@@ -21,8 +21,8 @@
     </a>
     <p class="mt-2.5 text-sm font-semibold text-slate-200 truncate group-hover:text-white transition-colors">{{ $movie['title'] ?? $movie['name'] ?? '' }}</p>
     @if(!empty($movie['release_date']))
-    <p class="text-xs text-slate-500">{{ substr($movie['release_date'], 0, 4) }}</p>
+    <p class="text-xs text-slate-400">{{ substr($movie['release_date'], 0, 4) }}</p>
     @elseif(!empty($movie['first_air_date']))
-    <p class="text-xs text-slate-500">{{ substr($movie['first_air_date'], 0, 4) }}</p>
+    <p class="text-xs text-slate-400">{{ substr($movie['first_air_date'], 0, 4) }}</p>
     @endif
 </div>

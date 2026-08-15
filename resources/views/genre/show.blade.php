@@ -19,7 +19,7 @@
         @forelse($movies['results'] ?? [] as $movie)
             @include('partials.movie-card', compact('movie'))
         @empty
-            <p class="col-span-full text-center text-slate-500 py-20">No movies found in this genre.</p>
+            <p class="col-span-full text-center text-slate-400 py-20">No movies found in this genre.</p>
         @endforelse
     </div>
     <x-pagination :currentPage="$movies['page'] ?? 1" :lastPage="$movies['total_pages'] ?? 1" />

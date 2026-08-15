@@ -26,7 +26,7 @@
             </div>
 
             {{-- Info --}}
-            <div class="flex-1 pt-2">
+            <div class="flex-1 min-w-0 pt-2">
                 <h1 class="text-3xl md:text-5xl font-bold text-white mb-2 tracking-tight leading-tight">{{ $movie['title'] ?? '' }}</h1>
                 @if(!empty($movie['tagline']))
                 <p class="text-slate-400 italic mb-5 text-sm">"{{ $movie['tagline'] }}"</p>
@@ -43,7 +43,7 @@
                     <span class="text-slate-400">{{ $movie['release_date'] }}</span>
                     @endif
                     @if(!empty($movie['runtime']))
-                    <span class="text-slate-500">{{ floor($movie['runtime'] / 60) }}h {{ $movie['runtime'] % 60 }}m</span>
+                    <span class="text-slate-400">{{ floor($movie['runtime'] / 60) }}h {{ $movie['runtime'] % 60 }}m</span>
                     @endif
                 </div>
 
@@ -61,13 +61,14 @@
 
                 {{-- Actions --}}
                 <div class="flex flex-wrap gap-3 mb-8">
-                    <button onclick="watchlistAction(this, {{ $movie['id'] }}, @js($movie['title'] ?? ''), @js(app(App\Services\TmdbService::class)->imageUrl($movie['poster_path'] ?? null)))"
-                            class="inline-flex items-center gap-2 bg-accent hover:bg-opacity-90 text-slate-900 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    <button id="wl-btn-{{ $movie['id'] }}"
+                            onclick="watchlistAction(this, {{ $movie['id'] }}, @js($movie['title'] ?? ''), @js(app(App\Services\TmdbService::class)->imageUrl($movie['poster_path'] ?? null)))"
+                            class="inline-flex items-center gap-2 bg-accent hover:bg-opacity-90 text-slate-900 px-5 py-3 rounded-xl font-semibold text-sm transition-all">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path data-wl-icon stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                         <span id="wl-text-{{ $movie['id'] }}">Watchlist</span>
                     </button>
                     <button onclick="shareMovie(@js($movie['title'] ?? ''), window.location.href)"
-                            class="inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all">
+                            class="inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 px-5 py-3 rounded-xl font-semibold text-sm transition-all">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
                         Share
                     </button>
@@ -76,7 +77,7 @@
                 {{-- Platforms --}}
                 @if(!empty($movie['watch/providers']['results']['ID']['flatrate']))
                 <div class="mb-7">
-                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Available on</h3>
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Available on</h3>
                     <div class="flex gap-3">
                         @foreach($movie['watch/providers']['results']['ID']['flatrate'] as $provider)
                         <div class="flex items-center gap-2 bg-white/5 border border-white/5 rounded-xl px-3 py-2">
@@ -96,7 +97,7 @@
                 @php $trailer = collect($movie['videos']['results'])->firstWhere('type', 'Trailer') ?? $movie['videos']['results'][0] @endphp
                 @if($trailer && $trailer['site'] === 'YouTube')
                 <div class="mb-7">
-                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Trailer</h3>
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Trailer</h3>
                     <div class="aspect-video rounded-2xl overflow-hidden border border-white/5 shadow-xl shadow-black/30">
                         <iframe src="https://www.youtube.com/embed/{{ $trailer['key'] }}"
                                 class="w-full h-full"
@@ -110,7 +111,7 @@
                 {{-- Cast --}}
                 @if(!empty($movie['credits']['cast']))
                 <div class="mb-7">
-                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Cast</h3>
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Cast</h3>
                     <div class="scroll-container">
                         @foreach(array_slice($movie['credits']['cast'], 0, 15) as $cast)
                         <a href="{{ route('person.show', $cast['id']) }}" class="group w-[110px]">
@@ -122,7 +123,7 @@
                                      onerror="this.src='/img/no-poster.svg'">
                             </div>
                             <p class="text-xs font-semibold text-slate-300 truncate group-hover:text-white transition-colors">{{ $cast['name'] }}</p>
-                            <p class="text-[10px] text-slate-500 truncate">{{ $cast['character'] }}</p>
+                            <p class="text-[10px] text-slate-400 truncate">{{ $cast['character'] }}</p>
                         </a>
                         @endforeach
                     </div>
@@ -132,12 +133,12 @@
                 {{-- Crew --}}
                 @if(!empty($movie['credits']['crew']))
                 <div class="mb-7">
-                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Crew</h3>
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Crew</h3>
                     <div class="flex flex-wrap gap-x-5 gap-y-2">
                         @foreach(array_slice($movie['credits']['crew'], 0, 10) as $crew)
                         <a href="{{ route('person.show', $crew['id']) }}" class="text-sm text-slate-400 hover:text-white transition-colors">
                             <span class="font-semibold text-slate-300">{{ $crew['name'] }}</span>
-                            <span class="text-slate-600"> &middot; {{ $crew['job'] }}</span>
+                            <span class="text-slate-400"> &middot; {{ $crew['job'] }}</span>
                         </a>
                         @endforeach
                     </div>
@@ -147,7 +148,7 @@
                 {{-- Recommendations --}}
                 @if(!empty($movie['recommendations']['results']))
                 <div>
-                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">You might also like</h3>
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">You might also like</h3>
                     <div class="scroll-container">
                         @foreach($movie['recommendations']['results'] as $rec)
                             @include('partials.movie-card', ['movie' => $rec])
@@ -162,29 +163,28 @@
 
 @push('scripts')
 <script>
-    if (isInWatchlist({{ $movie['id'] }})) {
-        const btn = document.querySelector('#wl-text-{{ $movie['id'] }}');
-        if (btn) {
-            btn.textContent = 'Remove';
-            btn.closest('button').classList.add('bg-white/10', 'text-white');
-            btn.closest('button').classList.remove('bg-accent', 'text-slate-900');
-        }
+    const WL_ICON_ADD = 'M12 4v16m8-8H4';
+    const WL_ICON_IN_LIST = 'M5 13l4 4L19 7';
+
+    function renderWatchlistButton(btn, inList) {
+        if (! btn) return;
+        btn.querySelector('span').textContent = inList ? 'Remove' : 'Watchlist';
+        btn.querySelector('[data-wl-icon]')?.setAttribute('d', inList ? WL_ICON_IN_LIST : WL_ICON_ADD);
+        btn.classList.toggle('bg-white/10', inList);
+        btn.classList.toggle('text-white', inList);
+        btn.classList.toggle('bg-accent', ! inList);
+        btn.classList.toggle('text-slate-900', ! inList);
     }
+
+    renderWatchlistButton(
+        document.getElementById('wl-btn-{{ $movie['id'] }}'),
+        isInWatchlist({{ $movie['id'] }})
+    );
 
     function watchlistAction(btn, id, title, poster) {
         const added = toggleWatchlist({id, title, poster});
-        const text = btn.querySelector('span');
-        if (added) {
-            text.textContent = 'Remove';
-            btn.classList.remove('bg-accent', 'text-slate-900');
-            btn.classList.add('bg-white/10', 'text-white');
-            showToast('Added to watchlist');
-        } else {
-            text.textContent = 'Watchlist';
-            btn.classList.remove('bg-white/10', 'text-white');
-            btn.classList.add('bg-accent', 'text-slate-900');
-            showToast('Removed from watchlist');
-        }
+        renderWatchlistButton(btn, added);
+        showToast(added ? 'Added to watchlist' : 'Removed from watchlist');
     }
 
     addRecentlyViewed({

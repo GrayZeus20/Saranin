@@ -8,7 +8,7 @@
             ← Prev
         </a>
     @else
-        <span class="px-4 py-2 bg-white/5 rounded-xl text-sm text-slate-600 border border-white/5 cursor-not-allowed">← Prev</span>
+        <span class="px-4 py-2 bg-white/5 rounded-xl text-sm text-slate-500 border border-white/5 cursor-not-allowed">← Prev</span>
     @endif
 
     @php
@@ -20,7 +20,7 @@
         <a href="{{ request()->fullUrlWithQuery(['page' => 1]) }}"
            class="w-9 h-9 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-xl text-sm text-slate-400 transition-all border border-white/5 hover:border-white/10">1</a>
         @if($start > 2)
-            <span class="px-1 text-slate-600 text-sm">…</span>
+            <span class="px-1 text-slate-500 text-sm">…</span>
         @endif
     @endif
 
@@ -35,7 +35,7 @@
 
     @if($end < $lastPage)
         @if($end < $lastPage - 1)
-            <span class="px-1 text-slate-600 text-sm">…</span>
+            <span class="px-1 text-slate-500 text-sm">…</span>
         @endif
         <a href="{{ request()->fullUrlWithQuery(['page' => $lastPage]) }}"
            class="w-9 h-9 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-xl text-sm text-slate-400 transition-all border border-white/5 hover:border-white/10">{{ $lastPage }}</a>
@@ -47,7 +47,7 @@
             Next →
         </a>
     @else
-        <span class="px-4 py-2 bg-white/5 rounded-xl text-sm text-slate-600 border border-white/5 cursor-not-allowed">Next →</span>
+        <span class="px-4 py-2 bg-white/5 rounded-xl text-sm text-slate-500 border border-white/5 cursor-not-allowed">Next →</span>
     @endif
 </div>
 @endif
