@@ -71,7 +71,7 @@
                 {{-- Overview with enhanced typography --}}
                 <div class="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 mb-8">
                     <h3 class="text-sm font-semibold text-accent uppercase tracking-wider mb-3">Synopsis</h3>
-                    <p class="text-slate-300 leading-relaxed text-base">{{ $movie['overview'] ?? 'No overview available.' }}</p>
+                    <p class="text-slate-300 leading-relaxed text-base text-justify">{{ $movie['overview'] ?? 'No overview available.' }}</p>
                 </div>
 
                 {{-- Platforms with enhanced styling --}}
