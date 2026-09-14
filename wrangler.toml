@@ -1,0 +1,6 @@
+name = "movieflix"
+main = "functions/_worker.js"
+compatibility_date = "2026-09-09"
+
+[vars]
+TMDB_API_KEY = "YOUR_TMDB_API_KEY_HERE"

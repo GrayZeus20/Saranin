@@ -1,0 +1,9 @@
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  X-XSS-Protection: 1; mode=block
+  Referrer-Policy: strict-origin-when-cross-origin
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' https://image.tmdb.org https://*.fontsource.org data:; font-src 'self' https://fonts.gstatic.com https://*.fontsource.org; connect-src 'self' https://api.themoviedb.org; frame-src https://www.youtube.com https://www.youtube-nocookie.com; media-src 'self' https://*.tmdb.org; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
