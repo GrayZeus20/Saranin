@@ -114,7 +114,25 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink 
   title: string; subtitle: string; movies: Movie[]; onMovieClick: (m: Movie) => void; viewAllLink?: string
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  if (movies.length === 0) return null
+  if (movies.length === 0) {
+    // Show skeleton instead of disappearing — prevents layout shift
+    return (
+      <div className="mb-10 md:mb-14">
+        <div className="flex items-baseline gap-3 mb-4">
+          <div className="skeleton h-5 w-24 rounded" />
+          <div className="skeleton h-3 w-16 rounded" />
+        </div>
+        <div className="flex gap-3 overflow-hidden">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="shrink-0 w-28 sm:w-32 md:w-36">
+              <div className="skeleton w-full aspect-[2/3] rounded-xl" />
+              <div className="skeleton h-3 w-3/4 rounded mt-1.5" />
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
@@ -184,7 +202,7 @@ export default function App() {
   const nowPlayingRef = useRef<HTMLDivElement>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const ITEMS_PER_PAGE = 20
-  const INITIAL_PAGES = 5
+  const INITIAL_PAGES = 2
   const [maxPage, setMaxPage] = useState(INITIAL_PAGES)
   const [loadingMore, setLoadingMore] = useState(false)
   const isLoadingMoreRef = useRef(false)
@@ -282,7 +300,10 @@ export default function App() {
       setTrending(trendingData.map(normalizeMovie))
       setPopular(popularData.map(normalizeMovie))
       setTopRated(topRatedData.map(normalizeMovie))
-      setLoading(false)
+      // Wait for TV data too before hiding skeleton — prevents layout shift
+      if (tvTrendingData && tvPopularData && tvTopRatedData && tvOnAirData) {
+        setLoading(false)
+      }
     }
     if (tvTrendingData) setTvTrending(tvTrendingData.map(normalizeTv))
     if (tvPopularData) setTvPopular(tvPopularData.map(normalizeTv))
