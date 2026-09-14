@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "@fontsource/outfit/latin.css";
 
 @theme {
   --font-sans: "Outfit", system-ui, sans-serif;
