@@ -27,3 +27,5 @@ yarn-error.log*
 
 # Vite
 *.local
+node_modules
+.env
