@@ -138,7 +138,8 @@ export default function CategoryPage() {
         const results = await Promise.all(
           batch.map(async (movie) => {
             try {
-              const data = await fetchWithRateLimit<any>(`${BASE_URL}/movie/${movie.id}/watch/providers`)
+              const mediaType = movie.media_type === 'tv' ? 'tv' : 'movie'
+              const data = await fetchWithRateLimit<any>(`${BASE_URL}/${mediaType}/${movie.id}/watch/providers`)
               const regionResults = data.results?.ID || {}
               return { id: movie.id, providers: regionResults.flatrate || regionResults.rent || regionResults.buy || [] }
             } catch {
