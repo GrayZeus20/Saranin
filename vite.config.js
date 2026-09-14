@@ -14,9 +14,9 @@ function securityHeaders() {
         res.setHeader('Content-Security-Policy', [
           "default-src 'self'",
           "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-          "style-src 'self' 'unsafe-inline'",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "img-src 'self' https://image.tmdb.org https://*.fontsource.org data:",
-          "font-src 'self' https://fonts.gstatic.com https://*.fontsource.org",
+          "font-src 'self' https://fonts.gstatic.com data:",
           "connect-src 'self' https://api.themoviedb.org",
           "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
           "media-src 'self' https://*.tmdb.org",
