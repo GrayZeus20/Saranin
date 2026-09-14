@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
@@ -54,7 +54,6 @@ export default function CategoryPage() {
   const [activeProviders, setActiveProviders] = useState<number[]>([])
   const [showFilters, setShowFilters] = useState(false)
   const [contentType, setContentType] = useState<'all' | 'movie' | 'tv' | 'anime'>('movie')
-  const sentinelRef = useRef<HTMLDivElement>(null)
 
   const titles: Record<string, string> = {
     trending: 'Trending',
@@ -106,20 +105,12 @@ export default function CategoryPage() {
 
   useEffect(() => {
     if (movies) {
-      setAllMovies(prev => renderDedup([...prev, ...movies]))
+      // Pagination: replace data instead of appending
+      setAllMovies(renderDedup(movies))
       setLoading(false)
+      window.scrollTo(0, 0)
     }
   }, [movies])
-
-  useEffect(() => {
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !isLoading) {
-        setPage(prev => prev + 1)
-      }
-    }, { rootMargin: '400px' })
-    if (sentinelRef.current) observer.observe(sentinelRef.current)
-    return () => observer.disconnect()
-  }, [isLoading])
 
   // Fetch providers for loaded movies - optimized with parallel requests
   useEffect(() => {
@@ -410,8 +401,22 @@ export default function CategoryPage() {
           </div>
         )}
 
-        <div ref={sentinelRef} className="h-10 flex items-center justify-center">
-          {isLoading && <p className="text-text-muted text-sm animate-pulse">Loading more movies...</p>}
+        {/* Pagination Controls */}
+        <div className="flex justify-center gap-4 py-8">
+          <button
+            disabled={page === 1}
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            className="bg-surface-elevated border border-zinc-800 text-text-primary px-6 py-2 rounded-full font-bold hover:border-accent disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <span className="flex items-center text-text-muted font-mono">Page {page}</span>
+          <button
+            onClick={() => setPage(p => p + 1)}
+            className="bg-surface-elevated border border-zinc-800 text-text-primary px-6 py-2 rounded-full font-bold hover:border-accent"
+          >
+            Next
+          </button>
         </div>
       </div>
     </div>
