@@ -3,7 +3,8 @@ export const BASE_URL = 'https://api.themoviedb.org/3';
 export const IMG_BASE = 'https://image.tmdb.org/t/p';
 // Optimized rate limiting - 35 requests per 10 seconds (safe margin)
 let lastRequestTime = 0;
-const MIN_REQUEST_INTERVAL = 280;
+const MIN_REQUEST_INTERVAL = 300; // Slightly safer margin (3 req/s)
+const MAX_RETRIES = 3; // New: Max retry attempts
 // Concurrent request control
 const MAX_CONCURRENT = 6;
 let currentConcurrent = 0;
@@ -43,9 +44,10 @@ async function throttledFetch(url, options) {
         });
         // Handle rate limiting (429)
         if (res.status === 429) {
-            const retryAfter = parseInt(res.headers.get('Retry-After') || '2') * 1000;
-            await new Promise(r => setTimeout(r, retryAfter));
-            // Retry once
+            const retryAfter = (parseInt(res.headers.get('Retry-After') || '2') * 1000);
+            const jitter = Math.random() * 500; // Add 0-500ms jitter
+            await new Promise(r => setTimeout(r, retryAfter + jitter));
+            // Retry
             const retryRes = await fetch(url, {
                 ...options,
                 headers: {

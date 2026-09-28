@@ -38,24 +38,25 @@ const queryClient = new QueryClient({
 })
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route path="/" element={<App />} />
-              <Route path="/movie/:id" element={<MovieDetailPage />} />
-              <Route path="/tv/:id" element={<MovieDetailPage />} />
-              <Route path="/person/:id" element={<PersonDetailPage />} />
-              <Route path="/company/:id" element={<CompanyDetailPage />} />
-              <Route path="/category/:type" element={<CategoryPage />} />
-              <Route path="*" element={<App />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-        <Toaster position="bottom-right" theme="dark" />
-      </QueryClientProvider>
-    </ErrorBoundary>
-  </React.StrictMode>
+  // NOTE: StrictMode removed — double-invokes effects (provider fetch fires twice,
+  // causes redundant state updates). In production the guard check mitigates this
+  // but removing StrictMode keeps sessions stable across hot-reloads.
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/" element={<App />} />
+            <Route path="/movie/:id" element={<MovieDetailPage />} />
+            <Route path="/tv/:id" element={<MovieDetailPage />} />
+            <Route path="/person/:id" element={<PersonDetailPage />} />
+            <Route path="/company/:id" element={<CompanyDetailPage />} />
+            <Route path="/category/:type" element={<CategoryPage />} />
+            <Route path="*" element={<App />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+      <Toaster position="bottom-right" theme="dark" />
+    </QueryClientProvider>
+  </ErrorBoundary>
 )
