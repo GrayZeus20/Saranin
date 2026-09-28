@@ -1,5 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import React, { Suspense, lazy } from 'react';
+import { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -27,4 +27,8 @@ const queryClient = new QueryClient({
         },
     },
 });
-ReactDOM.createRoot(document.getElementById('root')).render(_jsx(React.StrictMode, { children: _jsx(ErrorBoundary, { children: _jsxs(QueryClientProvider, { client: queryClient, children: [_jsx(BrowserRouter, { children: _jsx(Suspense, { fallback: _jsx(PageLoader, {}), children: _jsxs(Routes, { children: [_jsx(Route, { path: "/", element: _jsx(App, {}) }), _jsx(Route, { path: "/movie/:id", element: _jsx(MovieDetailPage, {}) }), _jsx(Route, { path: "/tv/:id", element: _jsx(MovieDetailPage, {}) }), _jsx(Route, { path: "/person/:id", element: _jsx(PersonDetailPage, {}) }), _jsx(Route, { path: "/company/:id", element: _jsx(CompanyDetailPage, {}) }), _jsx(Route, { path: "/category/:type", element: _jsx(CategoryPage, {}) }), _jsx(Route, { path: "*", element: _jsx(App, {}) })] }) }) }), _jsx(Toaster, { position: "bottom-right", theme: "dark" })] }) }) }));
+ReactDOM.createRoot(document.getElementById('root')).render(
+// NOTE: StrictMode removed — double-invokes effects (provider fetch fires twice,
+// causes redundant state updates). In production the guard check mitigates this
+// but removing StrictMode keeps sessions stable across hot-reloads.
+_jsx(ErrorBoundary, { children: _jsxs(QueryClientProvider, { client: queryClient, children: [_jsx(BrowserRouter, { children: _jsx(Suspense, { fallback: _jsx(PageLoader, {}), children: _jsxs(Routes, { children: [_jsx(Route, { path: "/", element: _jsx(App, {}) }), _jsx(Route, { path: "/movie/:id", element: _jsx(MovieDetailPage, {}) }), _jsx(Route, { path: "/tv/:id", element: _jsx(MovieDetailPage, {}) }), _jsx(Route, { path: "/person/:id", element: _jsx(PersonDetailPage, {}) }), _jsx(Route, { path: "/company/:id", element: _jsx(CompanyDetailPage, {}) }), _jsx(Route, { path: "/category/:type", element: _jsx(CategoryPage, {}) }), _jsx(Route, { path: "*", element: _jsx(App, {}) })] }) }) }), _jsx(Toaster, { position: "bottom-right", theme: "dark" })] }) }));

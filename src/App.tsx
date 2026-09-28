@@ -152,8 +152,9 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink 
           <p className="text-text-muted text-xs">{subtitle}</p>
         </div>
         {viewAllLink && (
-          <Link to={viewAllLink} className="text-accent text-xs font-bold hover:underline transition-colors">
-            View All
+          <Link to={viewAllLink} className="inline-flex items-center gap-1.5 text-sm text-accent hover:text-white font-medium transition-colors">
+            See all
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/></svg>
           </Link>
         )}
       </div>
@@ -414,13 +415,15 @@ export default function App() {
   }, [])
 
   const CATEGORIES = useMemo(() => [
-    { key: 'now_playing', label: 'Now Playing', data: [...movies, ...tvOnAir] },
+    // Grid uses initial nowPlaying data only — stable across infinite scroll
+    // (movies grows via infinite scroll; nowPlaying is fixed React Query data)
+    { key: 'now_playing', label: 'Now Playing', data: renderDedup([...(nowPlaying ?? []).map(normalizeMovie), ...tvOnAir.map(normalizeTv)]) },
     { key: 'trending', label: 'Trending', data: [...trending, ...tvTrending] },
     { key: 'popular', label: 'Popular', data: [...popular, ...tvPopular] },
     { key: 'top_rated', label: 'Top Rated', data: [...topRated, ...tvTopRated] },
-  ], [movies, tvOnAir, trending, popular, topRated, tvTrending, tvPopular, tvTopRated])
+  ], [nowPlaying, tvOnAir, trending, popular, topRated, tvTrending, tvPopular, tvTopRated, renderDedup])
 
-  const baseMovies = useMemo(() => renderDedup(CATEGORIES.find(c => c.key === activeCategory)?.data || movies), [CATEGORIES, activeCategory, movies, renderDedup])
+  const baseMovies = useMemo(() => renderDedup(CATEGORIES.find(c => c.key === activeCategory)?.data || []), [CATEGORIES, activeCategory, renderDedup])
 
   // Filter by contentType first to compute available genres dynamically
   const typeFilteredMovies = useMemo(() => baseMovies.filter(m => {
@@ -465,6 +468,16 @@ export default function App() {
   const trendingSection = useMemo(() => renderDedup([...trending, ...tvTrending]), [trending, tvTrending])
   const popularSection = useMemo(() => renderDedup([...popular, ...tvPopular]), [popular, tvPopular])
   const topRatedSection = useMemo(() => renderDedup([...topRated, ...tvTopRated]), [topRated, tvTopRated])
+
+  // Freeze horizontal sections after first paint — infinite scroll appends pages
+  // to the same arrays, which kept reshuffling the sections mid-session.
+  const frozenSections = useRef<{ trending: Movie[]; popular: Movie[]; topRated: Movie[] } | null>(null)
+  if (!loading && !frozenSections.current && trendingSection.length > 0) {
+    frozenSections.current = { trending: trendingSection, popular: popularSection, topRated: topRatedSection }
+  }
+  const stableTrendingSection = frozenSections.current?.trending ?? trendingSection
+  const stablePopularSection = frozenSections.current?.popular ?? popularSection
+  const stableTopRatedSection = frozenSections.current?.topRated ?? topRatedSection
 
   const [filteredMovies, setFilteredMovies] = useState<Movie[]>([])
 
@@ -642,13 +655,13 @@ export default function App() {
         {currentPage === 1 && (
           <>
             <div>
-              <HorizontalSection title="Trending" subtitle="What's hot this week" movies={trendingSection} onMovieClick={openDetail} />
+              <HorizontalSection title="Trending" subtitle="What's hot this week" movies={stableTrendingSection} onMovieClick={openDetail} viewAllLink="/category/trending" />
             </div>
             <div>
-              <HorizontalSection title="Popular" subtitle="Most watched right now" movies={popularSection} onMovieClick={openDetail} />
+              <HorizontalSection title="Popular" subtitle="Most watched right now" movies={stablePopularSection} onMovieClick={openDetail} viewAllLink="/category/popular" />
             </div>
             <div>
-              <HorizontalSection title="Top Rated" subtitle="Critics' picks" movies={topRatedSection} onMovieClick={openDetail} />
+              <HorizontalSection title="Top Rated" subtitle="Critics' picks" movies={stableTopRatedSection} onMovieClick={openDetail} viewAllLink="/category/top_rated" />
             </div>
           </>
         )}

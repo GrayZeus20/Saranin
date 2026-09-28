@@ -1,4 +1,4 @@
-import { Fragment as _Fragment, jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState } from 'react';
 export function ImageWithFallback({ src, alt, className, fallbackText }) {
     const [error, setError] = useState(false);
