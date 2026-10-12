@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import Navbar from '../components/Navbar'
+import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
 
 interface CompanyDetail {
   id: number
@@ -26,9 +27,41 @@ interface MediaCredit {
   media_type: 'movie' | 'tv'
 }
 
-const TMDB_TOKEN = (import.meta as any).env.VITE_TMDB_TOKEN
-const BASE_URL = 'https://api.themoviedb.org/3'
-const IMG_BASE = 'https://image.tmdb.org/t/p'
+interface DiscoverResponse {
+  results?: any[]
+  total_pages?: number
+}
+
+// A single /discover page returns only 20 titles — a major studio has hundreds.
+// Walk the first N pages (bounded so a giant library cannot fire 100 requests).
+const MAX_CREDIT_PAGES = 5
+
+async function fetchCompanyCredits(id: string, signal: AbortSignal): Promise<{ movies: MediaCredit[]; tvShows: MediaCredit[] }> {
+  const collect = async (kind: 'movie' | 'tv'): Promise<MediaCredit[]> => {
+    const dateField = kind === 'movie' ? 'primary_release_date' : 'first_air_date'
+    const pages: MediaCredit[] = []
+    let totalPages = 1
+    for (let page = 1; page <= totalPages && page <= MAX_CREDIT_PAGES; page++) {
+      const data = await fetchWithRateLimit<DiscoverResponse>(
+        `/discover/${kind}?with_companies=${id}&sort_by=${dateField}.desc&language=en-US&page=${page}`,
+        { signal },
+      )
+      totalPages = data.total_pages || 1
+      for (const r of data.results || []) {
+        pages.push({
+          ...r,
+          media_type: kind,
+          title: r.title || r.name || '',
+          release_date: r.release_date || r.first_air_date || '',
+        })
+      }
+    }
+    return pages
+  }
+
+  const [movies, tvShows] = await Promise.all([collect('movie'), collect('tv')])
+  return { movies, tvShows }
+}
 
 export default function CompanyDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -36,6 +69,7 @@ export default function CompanyDetailPage() {
   const [movies, setMovies] = useState<MediaCredit[]>([])
   const [tvShows, setTvShows] = useState<MediaCredit[]>([])
   const [loading, setLoading] = useState(true)
+  const [creditsError, setCreditsError] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -46,42 +80,39 @@ export default function CompanyDetailPage() {
   useEffect(() => {
     if (!id) return
     setLoading(true)
+    setCreditsError(false)
 
     const controller = new AbortController()
-    const fetchCompanyData = async () => {
+    const load = async () => {
       try {
-        const companyRes = await fetch(`${BASE_URL}/company/${id}?language=en-US`, {
-          headers: { Authorization: `Bearer ${TMDB_TOKEN}` },
-          signal: controller.signal
-        })
-        if (!companyRes.ok) throw new Error(`${companyRes.status}`)
-        const companyData = await companyRes.json()
-
-        const [moviesRes, tvRes] = await Promise.all([
-          fetch(`${BASE_URL}/discover/movie?with_companies=${id}&sort_by=primary_release_date.desc&language=en-US`, {
-            headers: { Authorization: `Bearer ${TMDB_TOKEN}` },
-            signal: controller.signal
-          }),
-          fetch(`${BASE_URL}/discover/tv?with_companies=${id}&sort_by=first_air_date.desc&language=en-US`, {
-            headers: { Authorization: `Bearer ${TMDB_TOKEN}` },
-            signal: controller.signal
-          })
-        ])
-
-        const moviesData = await moviesRes.json()
-        const tvData = await tvRes.json()
-
+        const companyData = await fetchWithRateLimit<CompanyDetail>(`/company/${id}?language=en-US`, { signal: controller.signal })
+        if (controller.signal.aborted) return
         setCompany(companyData)
-        setMovies((moviesData.results || []).map((m: any) => ({ ...m, media_type: 'movie', title: m.title })))
-        setTvShows((tvData.results || []).map((t: any) => ({ ...t, media_type: 'tv', title: t.name || t.title })))
+
+        // Company header already resolves — credits are secondary, so a credit
+        // failure degrades to an inline notice instead of hiding the whole page.
+        try {
+          const { movies: mv, tvShows: tv } = await fetchCompanyCredits(id, controller.signal)
+          if (controller.signal.aborted) return
+          setMovies(mv)
+          setTvShows(tv)
+        } catch (err) {
+          if (!controller.signal.aborted) {
+            console.error('[company] credits failed', err)
+            setCreditsError(true)
+          }
+        }
       } catch (err) {
-        if (!controller.signal.aborted) console.error(err)
+        if (!controller.signal.aborted) {
+          console.error('[company] detail failed', err)
+          setCompany(null)
+        }
       } finally {
         if (!controller.signal.aborted) setLoading(false)
       }
     }
 
-    fetchCompanyData()
+    load()
     return () => controller.abort()
   }, [id])
 
@@ -194,7 +225,12 @@ export default function CompanyDetailPage() {
           </div>
         </motion.div>
 
-        <h2 className="text-xl font-black text-text-primary mb-8 border-b border-zinc-800 pb-4">Productions</h2>
+        <div className="flex items-baseline justify-between gap-4 mb-8 border-b border-zinc-800 pb-4">
+          <h2 className="text-xl font-black text-text-primary">Productions</h2>
+          {(movies.length > 0 || tvShows.length > 0) && (
+            <span className="text-text-muted text-xs">{movies.length + tvShows.length} titles</span>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
           {[...movies, ...tvShows].map((item, i) => (
@@ -230,7 +266,11 @@ export default function CompanyDetailPage() {
           ))}
         </div>
 
-        {movies.length === 0 && tvShows.length === 0 && (
+        {creditsError && (
+          <p className="text-text-muted text-center py-8 text-sm">Couldn't load every production list for this company. Refresh to try again.</p>
+        )}
+
+        {!creditsError && movies.length === 0 && tvShows.length === 0 && (
           <p className="text-text-muted text-center py-20 italic">No productions found for this company.</p>
         )}
       </div>

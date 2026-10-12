@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import Navbar from '../components/Navbar'
+import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
 
 interface PersonDetail {
   id: number
@@ -43,9 +44,7 @@ interface PersonCombinedCredits {
   crew: CrewCredit[]
 }
 
-const TMDB_TOKEN = (import.meta as any).env.VITE_TMDB_TOKEN
-const BASE_URL = 'https://api.themoviedb.org/3'
-const IMG_BASE = 'https://image.tmdb.org/t/p'
+interface CreditsResponse { cast?: any[]; crew?: any[] }
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return 'Unknown'
@@ -78,14 +77,8 @@ export default function PersonDetailPage() {
     setLoading(true)
     const controller = new AbortController()
     Promise.all([
-      fetch(`${BASE_URL}/person/${id}?language=en-US`, {
-        headers: { Authorization: `Bearer ${TMDB_TOKEN}` },
-        signal: controller.signal
-      }).then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.json() }),
-      fetch(`${BASE_URL}/person/${id}/combined_credits?language=en-US`, {
-        headers: { Authorization: `Bearer ${TMDB_TOKEN}` },
-        signal: controller.signal
-      }).then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.json() }),
+      fetchWithRateLimit<PersonDetail>(`/person/${id}?language=en-US`, { signal: controller.signal }),
+      fetchWithRateLimit<CreditsResponse>(`/person/${id}/combined_credits?language=en-US`, { signal: controller.signal }),
     ]).then(([personData, creditsData]) => {
       // Normalize TV credits: name→title, first_air_date→release_date
       const normalize = (arr: any[]) => arr.map(c => ({

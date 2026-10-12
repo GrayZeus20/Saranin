@@ -12,6 +12,7 @@ const MovieDetailPage = lazy(() => import('./pages/MovieDetailPage'))
 const PersonDetailPage = lazy(() => import('./pages/PersonDetailPage'))
 const CompanyDetailPage = lazy(() => import('./pages/CompanyDetailPage'))
 const CategoryPage = lazy(() => import('./pages/CategoryPage'))
+const SearchPage = lazy(() => import('./pages/SearchPage'))
 
 // Loading fallback for lazy routes
 function PageLoader() {
@@ -52,6 +53,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/person/:id" element={<PersonDetailPage />} />
             <Route path="/company/:id" element={<CompanyDetailPage />} />
             <Route path="/category/:type" element={<CategoryPage />} />
+            <Route path="/search" element={<SearchPage />} />
             <Route path="*" element={<App />} />
           </Routes>
         </Suspense>
