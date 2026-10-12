@@ -1,85 +1,64 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { toast } from 'sonner'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
+import { toast } from 'sonner'
 import { ImageWithFallback } from './components/ImageWithFallback'
 import Navbar from './components/Navbar'
-import { fetchWithRateLimit, batchFetchWithRateLimit, IMG_BASE, TMDB_TOKEN } from './utils/api'
+import { fetchWithRateLimit, IMG_BASE, TMDB_TOKEN } from './utils/api'
 import { formatDate, GENRE_MAP } from './utils/constants'
+import { normalizeMovie, normalizeTv, dedupById, type Movie } from './utils/tmdb'
+import { getRegionProviders } from './utils/providers'
+import { fetchDiscoverPage, WATCH_REGION, TMDB_MAX_PAGE, type CombinedPage, type TMDBListResponse, type DiscoverSort } from './utils/discover'
 
 // Environment validation
 if (!TMDB_TOKEN) {
   console.error('Missing VITE_TMDB_TOKEN in .env file. API calls will fail.')
 }
 
-interface WatchProvider {
-  provider_id: number
-  provider_name: string
-  logo_path: string
+type CategoryKey = 'now_playing' | 'trending' | 'popular' | 'top_rated'
+type ContentType = 'all' | 'movie' | 'tv' | 'anime'
+
+const CATEGORY_ENDPOINTS: Record<CategoryKey, { label: string; movie: string; tv: string }> = {
+  now_playing: { label: 'Now Playing', movie: '/movie/now_playing', tv: '/tv/on_the_air' },
+  trending: { label: 'Trending', movie: '/trending/movie/week', tv: '/trending/tv/week' },
+  popular: { label: 'Popular', movie: '/movie/popular', tv: '/tv/popular' },
+  top_rated: { label: 'Top Rated', movie: '/movie/top_rated', tv: '/tv/top_rated' },
 }
 
-interface Movie {
-  id: number
-  title: string
-  overview: string
-  poster_path: string
-  backdrop_path: string
-  vote_average: number
-  release_date: string
-  genre_ids: number[]
-  providers?: WatchProvider[]
-  media_type?: 'movie' | 'tv'
-  origin_country?: string[]
-  status?: string
+// Discover sort per category (see utils/discover for the per-kind field rule).
+const CATEGORY_SORT: Record<CategoryKey, DiscoverSort> = {
+  now_playing: { movie: 'primary_release_date.desc', tv: 'first_air_date.desc' },
+  trending: { movie: 'popularity.desc', tv: 'popularity.desc' },
+  popular: { movie: 'popularity.desc', tv: 'popularity.desc' },
+  top_rated: { movie: 'vote_average.desc', tv: 'vote_average.desc' },
 }
 
-interface CastMember {
-  id: number
-  name: string
-  character: string
-  profile_path: string | null
+// One request pair (movie + tv) == one visible page. No accumulation, no dedup drift:
+// each page replaces the previous one, so Prev/Next always moves forward.
+async function fetchCombinedPage(movieEndpoint: string, tvEndpoint: string, page: number): Promise<CombinedPage> {
+  const [movieData, tvData] = await Promise.all([
+    fetchWithRateLimit<TMDBListResponse>(`${movieEndpoint}?language=en-US&page=${page}`),
+    fetchWithRateLimit<TMDBListResponse>(`${tvEndpoint}?language=en-US&page=${page}`),
+  ])
+  const items = dedupById(
+    (movieData.results || []).map(normalizeMovie),
+    (tvData.results || []).map(normalizeTv),
+  )
+  const totalPages = Math.max(1, Math.min(TMDB_MAX_PAGE, Math.max(movieData.total_pages || 1, tvData.total_pages || 1)))
+  return { items, totalPages }
 }
 
-interface Video {
-  key: string
-  site: string
-  type: string
-  official: boolean
+function isAnime(m: Movie): boolean {
+  return !!m.genre_ids?.includes(16) && m.original_language === 'ja'
 }
 
-interface MovieDetail extends Movie {
-  runtime: number | null
-  tagline: string
-  budget: number
-  revenue: number
-  genres: { id: number; name: string }[]
-  production_companies: { id: number; name: string; logo_path: string | null }[]
-  credits: {
-    cast: CastMember[]
-    crew: { job: string; name: string }[]
-  }
-  videos: { results: Video[] }
-  similar: { results: Movie[] }
-  'watch/providers'?: { results: Record<string, { flatrate?: WatchProvider[]; rent?: WatchProvider[]; buy?: WatchProvider[] }> }
-}
-
-function normalizeTv(tv: any): Movie {
-  return {
-    ...tv,
-    title: tv.name || tv.title,
-    release_date: tv.first_air_date || tv.release_date,
-    media_type: 'tv',
-    origin_country: tv.origin_country || [],
-    status: tv.status || '',
-  }
-}
-
-function normalizeMovie(movie: any): Movie {
-  return {
-    ...movie,
-    media_type: 'movie',
-  }
+function matchesContentType(m: Movie, type: ContentType): boolean {
+  if (type === 'all') return true
+  if (type === 'anime') return isAnime(m)
+  // "TV Series" must not double-count anime — those belong to the Anime filter.
+  if (type === 'tv') return m.media_type === 'tv' && !isAnime(m)
+  return m.media_type === type
 }
 
 function posterUrl(path: string | null, size = 'w342'): string {
@@ -161,6 +140,7 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink 
 
       <button
         onClick={() => scroll('left')}
+        aria-label={`Scroll ${title} left`}
         className="absolute left-0 top-1/2 -translate-y-1/2 z-20 bg-black/50 backdrop-blur-sm p-2 rounded-r-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-black/70 hover:scale-110 active:scale-95"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
@@ -183,6 +163,7 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink 
 
       <button
         onClick={() => scroll('right')}
+        aria-label={`Scroll ${title} right`}
         className="absolute right-0 top-1/2 -translate-y-1/2 z-20 bg-black/50 backdrop-blur-sm p-2 rounded-l-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-black/70 hover:scale-110 active:scale-95"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -193,351 +174,146 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink 
 
 export default function App() {
   const navigate = useNavigate()
-  const [movies, setMovies] = useState<Movie[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+
   const [currentPage, setCurrentPage] = useState(1)
-  const [trending, setTrending] = useState<Movie[]>([])
-  const [popular, setPopular] = useState<Movie[]>([])
-  const [topRated, setTopRated] = useState<Movie[]>([])
-  const nowPlayingRef = useRef<HTMLDivElement>(null)
-  const loadMoreRef = useRef<HTMLDivElement>(null)
-  const ITEMS_PER_PAGE = 20
-  const INITIAL_PAGES = 2
-  const [maxPage, setMaxPage] = useState(INITIAL_PAGES)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const isLoadingMoreRef = useRef(false)
-
-  // Refs to track latest state for provider fetch (avoid stale closures)
-  const moviesRef = useRef(movies)
-  const trendingRef = useRef(trending)
-  const popularRef = useRef(popular)
-  const topRatedRef = useRef(topRated)
-  useEffect(() => { moviesRef.current = movies }, [movies])
-  useEffect(() => { trendingRef.current = trending }, [trending])
-  useEffect(() => { popularRef.current = popular }, [popular])
-  useEffect(() => { topRatedRef.current = topRated }, [topRated])
-
-  // Shared fetch helper — returns movies for a page range
-  const fetchCategoryPages = async (endpoint: string, pageStart: number, pageEnd: number): Promise<Movie[]> => {
-    const pages = Array.from({ length: pageEnd - pageStart + 1 }, (_, i) => pageStart + i)
-    const endpoints = pages.map(p => `${endpoint}?language=en-US&page=${p}`)
-    const results = await batchFetchWithRateLimit<any>(endpoints)
-    return results.flatMap(d => d.results || [])
-  }
-
-  const fetchCategory = async (endpoint: string, page: number): Promise<Movie[]> => {
-    const data = await fetchWithRateLimit<any>(`${endpoint}?language=en-US&page=${page}`)
-    return data.results || []
-  }
-
-  // Use React Query — fetch first 5 pages for all categories
-  const { data: nowPlaying, error: nowPlayingError } = useQuery({
-    queryKey: ['now_playing'],
-    queryFn: () => fetchCategoryPages('/movie/now_playing', 1, INITIAL_PAGES),
-    retry: 2,
-    retryDelay: 1000,
-  })
-  const { data: trendingData, error: trendingError } = useQuery({
-    queryKey: ['trending'],
-    queryFn: () => fetchCategoryPages('/trending/movie/week', 1, INITIAL_PAGES),
-    retry: 2,
-    retryDelay: 1000,
-  })
-  const { data: popularData, error: popularError } = useQuery({
-    queryKey: ['popular'],
-    queryFn: () => fetchCategoryPages('/movie/popular', 1, INITIAL_PAGES),
-    retry: 2,
-    retryDelay: 1000,
-  })
-  const { data: topRatedData, error: topRatedError } = useQuery({
-    queryKey: ['top_rated'],
-    queryFn: () => fetchCategoryPages('/movie/top_rated', 1, INITIAL_PAGES),
-    retry: 2,
-    retryDelay: 1000,
-  })
-
-  // TV Series fetch — first 3 pages
-  const { data: tvTrendingData } = useQuery({
-    queryKey: ['tv_trending'],
-    queryFn: () => fetchCategoryPages('/trending/tv/week', 1, 3),
-    retry: 2,
-    retryDelay: 1000,
-  })
-  const { data: tvPopularData } = useQuery({
-    queryKey: ['tv_popular'],
-    queryFn: () => fetchCategoryPages('/tv/popular', 1, 3),
-    retry: 2,
-    retryDelay: 1000,
-  })
-  const { data: tvTopRatedData } = useQuery({
-    queryKey: ['tv_top_rated'],
-    queryFn: () => fetchCategoryPages('/tv/top_rated', 1, 3),
-    retry: 2,
-    retryDelay: 1000,
-  })
-  const { data: tvOnAirData } = useQuery({
-    queryKey: ['tv_on_air'],
-    queryFn: () => fetchCategoryPages('/tv/on_the_air', 1, 3),
-    retry: 2,
-    retryDelay: 1000,
-  })
-  const [tvTrending, setTvTrending] = useState<Movie[]>([])
-  const [tvPopular, setTvPopular] = useState<Movie[]>([])
-  const [tvTopRated, setTvTopRated] = useState<Movie[]>([])
-  const [tvOnAir, setTvOnAir] = useState<Movie[]>([])
-
-  useEffect(() => {
-    // Handle errors from main queries
-    const queryError = nowPlayingError || trendingError || popularError || topRatedError
-    if (queryError) {
-      setError(queryError.message || 'Failed to load content')
-      setLoading(false)
-      return
-    }
-
-    if (nowPlaying && trendingData && popularData && topRatedData) {
-      setMovies(nowPlaying.map(normalizeMovie))
-      setTrending(trendingData.map(normalizeMovie))
-      setPopular(popularData.map(normalizeMovie))
-      setTopRated(topRatedData.map(normalizeMovie))
-      // Wait for TV data too before hiding skeleton — prevents layout shift
-      if (tvTrendingData && tvPopularData && tvTopRatedData && tvOnAirData) {
-        setLoading(false)
-      }
-    }
-    if (tvTrendingData) setTvTrending(tvTrendingData.map(normalizeTv))
-    if (tvPopularData) setTvPopular(tvPopularData.map(normalizeTv))
-    if (tvTopRatedData) setTvTopRated(tvTopRatedData.map(normalizeTv))
-    if (tvOnAirData) setTvOnAir(tvOnAirData.map(normalizeTv))
-  }, [nowPlaying, trendingData, popularData, topRatedData, tvTrendingData, tvPopularData, tvTopRatedData, tvOnAirData, nowPlayingError, trendingError, popularError, topRatedError])
-
-  // Fetch watch providers for all movie categories when data loads
-  useEffect(() => {
-    if (moviesRef.current.length === 0) return
-    const allMovies = [...moviesRef.current, ...trendingRef.current, ...popularRef.current, ...topRatedRef.current]
-    const seen = new Set<number>()
-    const unique = allMovies.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true })
-
-    const fetchProviders = async () => {
-      const updated = new Map<number, WatchProvider[]>()
-      // Batch fetch with rate limiter (max 5 concurrent)
-      const endpoints = unique.map(m => `/movie/${m.id}/watch/providers`)
-      const results = await batchFetchWithRateLimit<any>(endpoints)
-
-      // Process results
-      results.forEach((providerData, index) => {
-        if (providerData) {
-          const movieId = unique[index].id
-          const regionResults = providerData.results?.ID || {}
-          updated.set(movieId, regionResults.flatrate || regionResults.rent || regionResults.buy || [])
-        }
-      })
-
-      // Only update if there are actual changes to avoid re-render cascade
-      if (updated.size === 0) return
-
-      const updateList = (prev: Movie[]) => {
-        let changed = false
-        const next = prev.map(m => {
-          const providers = updated.get(m.id)
-          if (providers && providers !== m.providers) {
-            changed = true
-            return { ...m, providers }
-          }
-          return m
-        })
-        return changed ? next : prev
-      }
-
-      setMovies(updateList)
-      setTrending(updateList)
-      setPopular(updateList)
-      setTopRated(updateList)
-    }
-    fetchProviders()
-  }, [])
-
-  // Infinite scroll — load next 2 pages when user scrolls to bottom
-  useEffect(() => {
-    if (loading || isLoadingMoreRef.current) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0].isIntersecting || isLoadingMoreRef.current) return
-        isLoadingMoreRef.current = true
-        setLoadingMore(true)
-        const BATCH = 2
-        ;(async () => {
-          try {
-            const pages = Array.from({ length: BATCH }, (_, i) => maxPage + 1 + i)
-            const [np, tr, pop, top] = await Promise.all([
-              Promise.all(pages.map(p => fetchCategory('/movie/now_playing', p))).then(r => r.flat()),
-              Promise.all(pages.map(p => fetchCategory('/trending/movie/week', p))).then(r => r.flat()),
-              Promise.all(pages.map(p => fetchCategory('/movie/popular', p))).then(r => r.flat()),
-              Promise.all(pages.map(p => fetchCategory('/movie/top_rated', p))).then(r => r.flat()),
-            ])
-            const dedup = (prev: Movie[], next: Movie[]) => {
-              const ids = new Set(prev.map(m => m.id))
-              return [...prev, ...next.filter(m => !ids.has(m.id))]
-            }
-            setMovies(prev => dedup(prev, np.map(normalizeMovie)))
-            setTrending(prev => dedup(prev, tr.map(normalizeMovie)))
-            setPopular(prev => dedup(prev, pop.map(normalizeMovie)))
-            setTopRated(prev => dedup(prev, top.map(normalizeMovie)))
-            setMaxPage(prev => prev + BATCH)
-          } catch {
-            toast.error('Failed to load more content')
-          }
-          setLoadingMore(false)
-          isLoadingMoreRef.current = false
-        })()
-      },
-      { rootMargin: '400px' }
-    )
-    if (loadMoreRef.current) observer.observe(loadMoreRef.current)
-    return () => observer.disconnect()
-  }, [loading, maxPage])
-
-  const openDetail = (movie: Movie) => {
-    navigate(`/${movie.media_type === 'tv' ? 'tv' : 'movie'}/${movie.id}`)
-  }
-
+  const [activeCategory, setActiveCategory] = useState<CategoryKey>('now_playing')
   const [activeGenres, setActiveGenres] = useState<number[]>([])
-  const [activeProviders, setActiveProviders] = useState<number[]>([])
+  const [activePlatform, setActivePlatform] = useState<number | null>(null)
   const [showGenres, setShowGenres] = useState(false)
-  const [activeCategory, setActiveCategory] = useState('now_playing')
-  const [contentType, setContentType] = useState<'all' | 'movie' | 'tv' | 'anime'>('movie')
+  const [contentType, setContentType] = useState<ContentType>('movie')
 
-  // Defensive dedup for render
-  const renderDedup = useCallback((movies: Movie[]) => {
-      const seen = new Set<number>()
-      return movies.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true })
-  }, [])
+  const gridTopRef = useRef<HTMLDivElement>(null)
 
-  const CATEGORIES = useMemo(() => [
-    // Grid uses initial nowPlaying data only — stable across infinite scroll
-    // (movies grows via infinite scroll; nowPlaying is fixed React Query data)
-    { key: 'now_playing', label: 'Now Playing', data: renderDedup([...(nowPlaying ?? []).map(normalizeMovie), ...tvOnAir.map(normalizeTv)]) },
-    { key: 'trending', label: 'Trending', data: [...trending, ...tvTrending] },
-    { key: 'popular', label: 'Popular', data: [...popular, ...tvPopular] },
-    { key: 'top_rated', label: 'Top Rated', data: [...topRated, ...tvTopRated] },
-  ], [nowPlaying, tvOnAir, trending, popular, topRated, tvTrending, tvPopular, tvTopRated, renderDedup])
+  // --- Current page query: exactly one TMDB page per view ---
+  const endpoints = CATEGORY_ENDPOINTS[activeCategory]
+  const pageQuery = useQuery({
+    queryKey: ['home', activeCategory, currentPage, activePlatform],
+    queryFn: () => activePlatform === null
+      ? fetchCombinedPage(endpoints.movie, endpoints.tv, currentPage)
+      : fetchDiscoverPage({
+          sort: CATEGORY_SORT[activeCategory],
+          providerIds: [activePlatform],
+          page: currentPage,
+          voteFloor: activeCategory === 'top_rated',
+          excludeAnime: true,
+        }),
+    placeholderData: keepPreviousData,
+    retry: 2,
+    retryDelay: 1000,
+  })
 
-  const baseMovies = useMemo(() => renderDedup(CATEGORIES.find(c => c.key === activeCategory)?.data || []), [CATEGORIES, activeCategory, renderDedup])
+  // --- Region streaming catalog for the Platform filter ---
+  const { data: regionProviders } = useQuery({
+    queryKey: ['region_providers', WATCH_REGION],
+    queryFn: () => getRegionProviders(WATCH_REGION),
+    staleTime: Infinity,
+    retry: 1,
+  })
+  const platformOptions = regionProviders ?? []
 
-  // Filter by contentType first to compute available genres dynamically
-  const typeFilteredMovies = useMemo(() => baseMovies.filter(m => {
-    const isJapaneseAnimation = m.genre_ids?.includes(16) && (m as any).original_language === 'ja'
-    if (contentType === 'all') return true
-    if (contentType === 'anime') return isJapaneseAnimation
-    return m.media_type === contentType
-  }), [baseMovies, contentType])
+  // --- Row previews: fixed page 1, movie + tv per row ---
+  const trendingRow = useQuery({
+    queryKey: ['row', 'trending'],
+    queryFn: () => fetchCombinedPage('/trending/movie/week', '/trending/tv/week', 1),
+    retry: 2,
+  })
+  const popularRow = useQuery({
+    queryKey: ['row', 'popular'],
+    queryFn: () => fetchCombinedPage('/movie/popular', '/tv/popular', 1),
+    retry: 2,
+  })
+  const topRatedRow = useQuery({
+    queryKey: ['row', 'top_rated'],
+    queryFn: () => fetchCombinedPage('/movie/top_rated', '/tv/top_rated', 1),
+    retry: 2,
+  })
 
-  const availableGenres = useMemo(() => [...new Set(typeFilteredMovies.flatMap(m => m.genre_ids))]
+  const pageItems = useMemo(() => pageQuery.data?.items ?? [], [pageQuery.data])
+  const totalPages = pageQuery.data?.totalPages ?? 1
+  const isPageLoading = pageQuery.isLoading
+  const isPageFetching = pageQuery.isFetching
+
+  // Failed page change must not nuke the screen — only the very first load owns the error page.
+  useEffect(() => {
+    if (pageQuery.isError && pageQuery.data) toast.error('Failed to load that page. Try again.')
+  }, [pageQuery.isError, pageQuery.data])
+
+  const openDetail = useCallback((movie: Movie) => {
+    navigate(`/${movie.media_type === 'tv' ? 'tv' : 'movie'}/${movie.id}`)
+  }, [navigate])
+
+  const typeFilteredItems = useMemo(
+    () => pageItems.filter(m => matchesContentType(m, contentType)),
+    [pageItems, contentType]
+  )
+
+  const availableGenres = useMemo(() => [...new Set(typeFilteredItems.flatMap(m => m.genre_ids || []))]
     .map(id => ({ id, name: GENRE_MAP[id] }))
     .filter(g => g.name)
-    .sort((a, b) => a.name.localeCompare(b.name)), [typeFilteredMovies])
+    .sort((a, b) => a.name.localeCompare(b.name)), [typeFilteredItems])
 
-  const availableProviders = useMemo(() => [...new Map(
-    typeFilteredMovies.flatMap(m => m.providers || []).map(p => [p.provider_id, p])
-  ).values()].sort((a, b) => a.provider_name.localeCompare(b.provider_name)), [typeFilteredMovies])
+  // Platform is filtered server-side (see fetchDiscoverPage); only genre + type
+  // are applied client-side here so the pills stay instant.
+  const filteredMovies = useMemo(() => {
+    const list = pageItems.filter(m => {
+      const genreMatch = activeGenres.length === 0 || m.genre_ids?.some(id => activeGenres.includes(id))
+      return genreMatch && matchesContentType(m, contentType)
+    })
+    if (activeCategory === 'now_playing' && activePlatform === null) {
+      // ISO date strings (YYYY-MM-DD) sort chronologically as plain strings; using
+      // Date.getTime() on a date-only ISO value parses it as UTC and can reorder by TZ.
+      return [...list].sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''))
+    }
+    return list
+  }, [pageItems, activeGenres, contentType, activeCategory, activePlatform])
 
-  const toggleCategory = useCallback((key: string) => {
+  // Hero only exists on page 1; pages 2+ render every fetched item in the grid.
+  const isFirstPage = currentPage === 1
+  const featured = isFirstPage ? filteredMovies[0] : undefined
+  const gridMovies = isFirstPage ? filteredMovies.slice(1) : filteredMovies
+
+  const goToPage = useCallback((next: number) => {
+    setCurrentPage(Math.max(1, next))
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
+  const toggleCategory = useCallback((key: CategoryKey) => {
     setActiveCategory(key)
     setActiveGenres([])
-    setActiveProviders([])
     setContentType('movie')
     setCurrentPage(1)
   }, [])
 
   const toggleGenre = useCallback((id: number) => {
-    setActiveGenres(prev =>
-      prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id]
-    )
+    setActiveGenres(prev => prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id])
+  }, [])
+
+  // Single-select platform filter — 'All' clears it. Changing it re-fetches page 1.
+  const selectPlatform = useCallback((id: number | null) => {
+    setActivePlatform(id)
+    setActiveGenres([])
     setCurrentPage(1)
   }, [])
 
-  const toggleProvider = useCallback((id: number) => {
-    setActiveProviders(prev =>
-      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
-    )
-    setCurrentPage(1)
+  const scrollToGrid = useCallback(() => {
+    gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
-  // Memoized data for horizontal sections — prevent re-render cascade
-  const trendingSection = useMemo(() => renderDedup([...trending, ...tvTrending]), [trending, tvTrending])
-  const popularSection = useMemo(() => renderDedup([...popular, ...tvPopular]), [popular, tvPopular])
-  const topRatedSection = useMemo(() => renderDedup([...topRated, ...tvTopRated]), [topRated, tvTopRated])
+  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'all' ? 1 : 0)
 
-  // Freeze horizontal sections after first paint — infinite scroll appends pages
-  // to the same arrays, which kept reshuffling the sections mid-session.
-  const frozenSections = useRef<{ trending: Movie[]; popular: Movie[]; topRated: Movie[] } | null>(null)
-  if (!loading && !frozenSections.current && trendingSection.length > 0) {
-    frozenSections.current = { trending: trendingSection, popular: popularSection, topRated: topRatedSection }
-  }
-  const stableTrendingSection = frozenSections.current?.trending ?? trendingSection
-  const stablePopularSection = frozenSections.current?.popular ?? popularSection
-  const stableTopRatedSection = frozenSections.current?.topRated ?? topRatedSection
+  const trendingRowItems = useMemo(() => (trendingRow.data?.items ?? []).slice(0, 16), [trendingRow.data])
+  const popularRowItems = useMemo(() => (popularRow.data?.items ?? []).slice(0, 16), [popularRow.data])
+  const topRatedRowItems = useMemo(() => (topRatedRow.data?.items ?? []).slice(0, 16), [topRatedRow.data])
 
-  const [filteredMovies, setFilteredMovies] = useState<Movie[]>([])
-
-  useEffect(() => {
-    // Removed delay entirely for instant feedback
-    const filtered = baseMovies.filter(m => {
-      const genreMatch = activeGenres.length === 0 || m.genre_ids?.some(id => activeGenres.includes(id))
-      const providerMatch = activeProviders.length === 0 || (m.providers || []).some(p => activeProviders.includes(p.provider_id))
-      const isJapaneseAnimation = m.genre_ids?.includes(16) && (m as any).original_language === 'ja'
-
-      // Unified type match
-      let typeMatch = false
-      if (contentType === 'all') {
-        typeMatch = true
-      } else if (contentType === 'anime') {
-        typeMatch = isJapaneseAnimation
-      } else {
-        typeMatch = m.media_type === contentType
-      }
-
-      return genreMatch && providerMatch && typeMatch
-    })
-    // Sort by release date descending for "Now Playing" to ensure newest first
-    if (activeCategory === 'now_playing') {
-      filtered.sort((a, b) => {
-        const dateA = new Date(a.release_date || 0).getTime()
-        const dateB = new Date(b.release_date || 0).getTime()
-        return dateB - dateA
-      })
-    }
-
-    // Only update if filtered result changed — prevent re-render cascade
-    setFilteredMovies(prev => {
-      if (prev.length === filtered.length && prev.every((m, i) => m.id === filtered[i].id)) {
-        return prev
-      }
-      return filtered
-    })
-  }, [baseMovies, activeGenres, activeProviders, contentType, activeCategory])
-
-  const [featured, ...allRest] = filteredMovies
-  const totalPages = Math.ceil(allRest.length / ITEMS_PER_PAGE)
-  const paginatedMovies = allRest.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
-
-  // Sliding pagination window — always show 5 pages
-  const PAGINATION_WINDOW = 5
-  let pageStart = Math.max(1, currentPage - Math.floor(PAGINATION_WINDOW / 2))
-  let pageEnd = Math.min(totalPages, pageStart + PAGINATION_WINDOW - 1)
-  if (pageEnd - pageStart < PAGINATION_WINDOW - 1) pageStart = Math.max(1, pageEnd - PAGINATION_WINDOW + 1)
-  const pageRange = Array.from({ length: pageEnd - pageStart + 1 }, (_, i) => pageStart + i)
-
-  if (error) {
+  if (pageQuery.isError && !pageQuery.data) {
     return (
       <div className="min-h-[100dvh] bg-surface flex items-center justify-center px-6">
         <div className="text-center max-w-sm">
           <p className="text-5xl mb-4">&#x1f3ac;</p>
           <p className="text-text-primary text-lg font-semibold mb-2">Something went wrong</p>
-          <p className="text-text-muted text-sm">{error}</p>
+          <p className="text-text-muted text-sm">{(pageQuery.error as Error)?.message || 'Failed to load content'}</p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => pageQuery.refetch()}
             className="mt-6 bg-accent text-black text-sm font-bold px-6 py-2.5 rounded-full active:scale-95 transition-transform"
           >
             Try Again
@@ -547,7 +323,7 @@ export default function App() {
     )
   }
 
-  if (loading) {
+  if (isPageLoading) {
     return (
       <div className="min-h-[100dvh] bg-surface px-4 sm:px-6 md:px-12 py-6 max-w-[1400px] mx-auto">
         <header className="mb-10">
@@ -564,22 +340,26 @@ export default function App() {
 
   return (
     <div className="min-h-[100dvh] bg-surface">
-      {/* Ambient glow behind hero — only on page 1 */}
-      {currentPage === 1 && featured?.backdrop_path ? (
-        <div
-          className="fixed inset-0 pointer-events-none z-0 opacity-20"
-          style={{
-            background: `radial-gradient(ellipse at 50% 0%, url(${IMG_BASE}/w500${featured.backdrop_path}) 0%, transparent 70%)`,
-          }}
-        />
+      {/* Ambient backdrop behind the hero — page 1 only. Previously a
+          radial-gradient() whose color stops were url(...) values, which is invalid
+          CSS and painted nothing; this is a real image layer with a CSS fade mask. */}
+      {isFirstPage && featured?.backdrop_path ? (
+        <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
+          <img
+            src={`${IMG_BASE}/w1280${featured.backdrop_path}`}
+            alt=""
+            className="w-full h-[55vh] object-cover object-top opacity-20 blur-3xl scale-125"
+            style={{ maskImage: 'linear-gradient(to bottom, black, transparent 85%)', WebkitMaskImage: 'linear-gradient(to bottom, black, transparent 85%)' }}
+          />
+        </div>
       ) : null}
 
       <div className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 md:px-12 py-5 md:py-8">
         {/* Navigation */}
         <Navbar />
 
-        {/* Hero / Featured Movie — only on page 1 */}
-        {featured && currentPage === 1 && (
+        {/* Hero / Featured Movie — page 1 only */}
+        {featured && (
           <motion.section
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -651,32 +431,34 @@ export default function App() {
           </motion.section>
         )}
 
-        {/* Movie Category Sections — only on page 1 */}
-        {currentPage === 1 && (
+        {/* Movie Category Sections — page 1 only */}
+        {isFirstPage && (
           <>
             <div>
-              <HorizontalSection title="Trending" subtitle="What's hot this week" movies={stableTrendingSection} onMovieClick={openDetail} viewAllLink="/category/trending" />
+              <HorizontalSection title="Trending" subtitle="What's hot this week" movies={trendingRowItems} onMovieClick={openDetail} viewAllLink="/category/trending" />
             </div>
             <div>
-              <HorizontalSection title="Popular" subtitle="Most watched right now" movies={stablePopularSection} onMovieClick={openDetail} viewAllLink="/category/popular" />
+              <HorizontalSection title="Popular" subtitle="Most watched right now" movies={popularRowItems} onMovieClick={openDetail} viewAllLink="/category/popular" />
             </div>
             <div>
-              <HorizontalSection title="Top Rated" subtitle="Critics' picks" movies={stableTopRatedSection} onMovieClick={openDetail} viewAllLink="/category/top_rated" />
+              <HorizontalSection title="Top Rated" subtitle="Critics' picks" movies={topRatedRowItems} onMovieClick={openDetail} viewAllLink="/category/top_rated" />
             </div>
           </>
         )}
 
         {/* Section Header + Genre Filters */}
-        <motion.div ref={nowPlayingRef}
+        <motion.div ref={gridTopRef}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
-          className="mb-6 md:mb-8"
+          className="mb-6 md:mb-8 scroll-mt-20"
         >
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg sm:text-xl font-bold text-text-primary">{CATEGORIES.find(c => c.key === activeCategory)?.label || 'Now Playing'}</h3>
-              <p className="text-text-muted text-xs sm:text-sm mt-1">{filteredMovies.length} results</p>
+              <h3 className="text-lg sm:text-xl font-bold text-text-primary">{endpoints.label}</h3>
+              <p className="text-text-muted text-xs sm:text-sm mt-1">
+                {filteredMovies.length} results on this page
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -684,16 +466,16 @@ export default function App() {
                 className="bg-surface-elevated border border-zinc-800 text-text-primary text-xs font-bold px-4 py-2 rounded-full hover:border-accent transition-all active:scale-95 flex items-center gap-2"
               >
                 {showGenres ? 'Hide Filters' : 'Filters'}
-                {(activeGenres.length > 0 || activeProviders.length > 0 || contentType !== 'all') && (
+                {activeFilterCount > 0 && (
                   <span className="bg-accent text-black text-[10px] px-1.5 py-0.5 rounded-full">
-                    {[activeGenres.length, activeProviders.length, contentType !== 'all' ? 1 : 0].reduce((a, b) => a + b, 0)}
+                    {activeFilterCount}
                   </span>
                 )}
               </button>
             </div>
           </div>
 
-          {/* Genre filter pills - collapsible */}
+          {/* Filter pills - collapsible */}
           <AnimatePresence>
             {showGenres && (
               <motion.div
@@ -707,22 +489,17 @@ export default function App() {
                 <div className="mt-4 pb-4 border-b border-zinc-800/50">
                   <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Category</p>
                   <div className="flex flex-wrap gap-2">
-                    {[
-                      { key: 'now_playing', label: 'Now Playing' },
-                      { key: 'trending', label: 'Trending' },
-                      { key: 'popular', label: 'Popular' },
-                      { key: 'top_rated', label: 'Top Rated' },
-                    ].map(c => (
+                    {(Object.keys(CATEGORY_ENDPOINTS) as CategoryKey[]).map(key => (
                       <button
-                        key={c.key}
-                        onClick={() => toggleCategory(c.key)}
+                        key={key}
+                        onClick={() => toggleCategory(key)}
                         className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                          activeCategory === c.key
+                          activeCategory === key
                             ? 'bg-accent text-black'
                             : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
                         }`}
                       >
-                        {c.label}
+                        {CATEGORY_ENDPOINTS[key].label}
                       </button>
                     ))}
                   </div>
@@ -758,60 +535,65 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Platform Section */}
-                {availableProviders.length > 0 && (
-                  <div className="mt-4 pb-4 border-b border-zinc-800/50">
-                    <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Platform</p>
-                    <div className="flex flex-wrap gap-2">
+                {/* Platform Section — server-side filter against the region catalog */}
+                <div className="mt-4 pb-4 border-b border-zinc-800/50">
+                  <div className="flex items-baseline gap-2 mb-3">
+                    <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold">Platform</p>
+                    {activePlatform !== null && (
+                      <span className="text-accent text-[10px] font-bold">filtering</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => selectPlatform(null)}
+                      className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                        activePlatform === null
+                          ? 'bg-accent text-black'
+                          : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
+                      }`}
+                    >
+                      All
+                    </button>
+                    {platformOptions.map(p => (
                       <button
-                        onClick={() => setActiveProviders([])}
-                        className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                          activeProviders.length === 0
+                        key={p.provider_id}
+                        onClick={() => selectPlatform(p.provider_id)}
+                        className={`shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                          activePlatform === p.provider_id
                             ? 'bg-accent text-black'
                             : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
                         }`}
                       >
-                        All
-                      </button>
-                      {availableProviders.map(p => (
-                        <button
-                          key={p.provider_id}
-                          onClick={() => toggleProvider(p.provider_id)}
-                          className={`shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                            activeProviders.includes(p.provider_id)
-                              ? 'bg-accent text-black'
-                              : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
-                          }`}
-                        >
+                        {p.logo_path && (
                           <img
                             src={`${IMG_BASE}/w45${p.logo_path}`}
                             alt={p.provider_name}
                             className="w-4 h-4 rounded-sm object-cover"
                             loading="lazy"
                           />
-                          {p.provider_name}
-                        </button>
-                      ))}
-                    </div>
+                        )}
+                        {p.provider_name}
+                      </button>
+                    ))}
                   </div>
-                )}
+                  {platformOptions.length === 0 && (
+                    <p className="text-text-muted text-[10px] mt-2">Loading platforms…</p>
+                  )}
+                </div>
 
                 {/* Content Type Section */}
                 <div className="mt-4 pb-4 border-b border-zinc-800/50">
                   <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Type</p>
                   <div className="flex flex-wrap gap-2">
-                    {[
+                    {([
                       { key: 'all', label: 'All' },
                       { key: 'movie', label: 'Movies' },
                       { key: 'tv', label: 'TV Series' },
                       { key: 'anime', label: 'Anime' },
-                    ].map(t => (
+                    ] as { key: ContentType; label: string }[]).map(t => (
                       <button
                         key={t.key}
-                        onClick={() => {
-                          setContentType(t.key as 'all' | 'movie' | 'tv' | 'anime')
-                          setCurrentPage(1)
-                        }}
+                        onClick={() => setContentType(t.key)}
                         className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                           contentType === t.key
                             ? 'bg-accent text-black'
@@ -828,115 +610,117 @@ export default function App() {
           </AnimatePresence>
         </motion.div>
 
-        {/* Movie Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-8">
-          {paginatedMovies.map((movie, i) => (
-            <motion.article
-              key={`${activeCategory}-${movie.id}`}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.98 }}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                duration: 0.3,
-                delay: Math.min(0.05 + i * 0.02, 0.4),
-                ease: [0.16, 1, 0.3, 1],
-              }}
-              onClick={() => openDetail(movie)}
-              className="cursor-pointer"
-            >
-              <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
-                {movie.poster_path ? (
-                  <img
-                    src={`${IMG_BASE}/w500${movie.poster_path}`}
-                    alt={movie.title}
-                    className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-zinc-700 text-sm font-bold">{movie.title?.charAt(0)}</div>
-                )}
-                {/* Gradient overlay always visible */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
-                {/* Details indicator on hover */}
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300">
-                  <span className="bg-white text-black text-[10px] font-bold px-4 py-1.5 rounded-full shadow-lg">
-                    Details
-                  </span>
-                </div>
-                {/* Rating badge */}
-                <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
-                  &#9733; {movie.vote_average?.toFixed(1)}
-                </div>
-                {/* Anime badge */}
-                {movie.genre_ids?.includes(16) && (movie as any).original_language === 'ja' && (
-                  <div className={`absolute top-2 left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md ${movie.media_type === 'tv' ? 'top-8' : ''}`}>Anime</div>
-                )}
-                {/* Bottom info */}
-                <div className="absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/90 to-transparent">
-                  <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5">{movie.title}</p>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-white/50 text-[9px] sm:text-[10px]">{formatDate(movie.release_date)}</span>
-                    {movie.genre_ids?.[0] && (
-                      <>
-                        <span className="text-white/30 text-[9px]">•</span>
-                        <span className="text-white/50 text-[9px] sm:text-[10px]">{GENRE_MAP[movie.genre_ids[0]]}</span>
-                      </>
-                    )}
+        {/* Movie Grid — one TMDB page per view */}
+        <motion.div
+          animate={{ opacity: isPageFetching ? 0.45 : 1 }}
+          transition={{ duration: 0.25, ease: 'easeInOut' }}
+        >
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-8">
+            {gridMovies.map((movie, i) => (
+              <motion.article
+                key={`${activeCategory}-${movie.id}`}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.98 }}
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  duration: 0.3,
+                  delay: Math.min(0.05 + i * 0.02, 0.4),
+                  ease: [0.16, 1, 0.3, 1],
+                }}
+                onClick={() => openDetail(movie)}
+                className="cursor-pointer"
+              >
+                <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
+                  {movie.poster_path ? (
+                    <img
+                      src={`${IMG_BASE}/w500${movie.poster_path}`}
+                      alt={movie.title}
+                      className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-zinc-700 text-sm font-bold">{movie.title?.charAt(0)}</div>
+                  )}
+                  {/* Gradient overlay always visible */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                  {/* Details indicator on hover */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300">
+                    <span className="bg-white text-black text-[10px] font-bold px-4 py-1.5 rounded-full shadow-lg">
+                      Details
+                    </span>
+                  </div>
+                  {/* Rating badge */}
+                  <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
+                    &#9733; {movie.vote_average?.toFixed(1)}
+                  </div>
+                  {/* Anime badge */}
+                  {isAnime(movie) && (
+                    <div className={`absolute top-2 left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md ${movie.media_type === 'tv' ? 'top-8' : ''}`}>Anime</div>
+                  )}
+                  {/* Bottom info */}
+                  <div className="absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/90 to-transparent">
+                    <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5">{movie.title}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-white/50 text-[9px] sm:text-[10px]">{formatDate(movie.release_date)}</span>
+                      {movie.genre_ids?.[0] && (
+                        <>
+                          <span className="text-white/30 text-[9px]">•</span>
+                          <span className="text-white/50 text-[9px] sm:text-[10px]">{GENRE_MAP[movie.genre_ids[0]]}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.article>
-          ))}
-        </div>
-
-        {/* Pagination — sliding window of 5 pages */}
-        {totalPages > 1 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.5 }}
-            className="flex items-center justify-center gap-2 py-8 pb-12"
-          >
-            <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-2 rounded-lg text-xs font-bold bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-text-primary hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 active:scale-95"
-            >
-              ← Prev
-            </button>
-            {pageRange.map(page => (
-              <button
-                key={page}
-                onClick={() => { setCurrentPage(page); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-                className={`w-9 h-9 rounded-lg text-xs font-bold transition-all duration-200 hover:scale-110 active:scale-95 ${
-                  currentPage === page
-                    ? 'bg-accent text-black shadow-lg shadow-accent/20'
-                    : 'bg-surface-elevated border border-zinc-800 text-text-muted hover:border-zinc-600'
-                }`}
-              >
-                {page}
-              </button>
+              </motion.article>
             ))}
-            <button
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="px-3 py-2 rounded-lg text-xs font-bold bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-text-primary hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 active:scale-95"
-            >
-              Next →
-            </button>
-          </motion.div>
-        )}
+          </div>
+        </motion.div>
+
+        {/* Pagination — Prev / Next only. One page in view at a time. */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="flex items-center justify-center gap-4 py-8 pb-12"
+        >
+          <button
+            onClick={() => goToPage(currentPage - 1)}
+            disabled={currentPage === 1 || isPageFetching}
+            aria-label="Previous page"
+            className="px-5 py-2.5 rounded-full text-xs font-bold bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-text-primary hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200 active:scale-95"
+          >
+            ← Prev
+          </button>
+          <span className="text-text-muted text-xs font-mono tabular-nums min-w-[64px] text-center" aria-live="polite">
+            {isPageFetching ? '…' : `Page ${currentPage}`}
+          </span>
+          <button
+            onClick={() => goToPage(currentPage + 1)}
+            disabled={isPageFetching || currentPage >= totalPages}
+            aria-label="Next page"
+            className="px-5 py-2.5 rounded-full text-xs font-bold bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-text-primary hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200 active:scale-95"
+          >
+            Next →
+          </button>
+        </motion.div>
 
         {/* Empty state with smart suggestions */}
         {filteredMovies.length === 0 && (
           <div className="text-center py-16">
             <p className="text-4xl mb-3">&#x1f50d;</p>
-            <p className="text-text-primary text-sm font-bold mb-2">No results found</p>
-            <p className="text-text-muted text-xs mb-6">Try adjusting your filters or explore these suggestions</p>
+            <p className="text-text-primary text-sm font-bold mb-2">No results on this page</p>
+            <p className="text-text-muted text-xs mb-6">Try the next page, adjust filters, or explore these suggestions</p>
 
             {/* Smart suggestions based on current filters */}
             <div className="flex flex-wrap justify-center gap-2">
+              <button
+                onClick={() => { scrollToGrid(); goToPage(currentPage + 1) }}
+                disabled={isPageFetching || currentPage >= totalPages}
+                className="text-xs font-medium px-4 py-2 rounded-full bg-surface-elevated text-text-muted border border-zinc-800 hover:border-accent hover:text-accent transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Go to Next Page
+              </button>
               {contentType === 'anime' && (
                 <button
                   onClick={() => setContentType('all')}
@@ -954,7 +738,7 @@ export default function App() {
                 </button>
               )}
               <button
-                onClick={() => { setActiveGenres([]); setActiveProviders([]); setContentType('movie') }}
+                onClick={() => { setActiveGenres([]); setActivePlatform(null); setContentType('movie') }}
                 className="text-xs font-medium px-4 py-2 rounded-full bg-accent text-black hover:bg-accent/90 transition-all"
               >
                 Reset All Filters
@@ -962,9 +746,6 @@ export default function App() {
             </div>
           </div>
         )}
-
-        {/* Infinite scroll sentinel */}
-        <div ref={loadMoreRef} className="py-8" />
       </div>
     </div>
   )

@@ -30,3 +30,8 @@ yarn-error.log*
 node_modules
 .env
 .claude/
+
+# Build/scan artifacts (not source)
+build.log
+build-output.txt
+saranin-page.png

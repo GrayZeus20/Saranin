@@ -23,6 +23,7 @@ interface SearchResponse {
     vote_average: number
     media_type: 'movie' | 'tv'
   }>
+  total_results?: number
 }
 
 const NAV_LINKS = [
@@ -80,16 +81,28 @@ export default function Navbar() {
     }
     try {
       const data = await fetchWithRateLimit<SearchResponse>(
-        `/search/multi?query=${encodeURIComponent(query)}&language=en-US&page=1`
+        `/search/multi?query=${encodeURIComponent(query)}&language=en-US&include_adult=false&page=1`
       )
-      const results = (data.results || [])
-        .filter(r => r.media_type === 'movie' || r.media_type === 'tv')
-        .slice(0, 8)
-        .map(r => ({
-          ...r,
+      // Movie and TV ids live in separate TMDB namespaces, so `${type}-${id}` is the
+      // only collision-safe key. Dedupe on it: the dropdown keyed rows by bare id before,
+      // which React could silently collapse/mismatch.
+      const seen = new Set<string>()
+      const results: SearchResult[] = []
+      for (const r of data.results || []) {
+        if (r.media_type !== 'movie' && r.media_type !== 'tv') continue
+        const key = `${r.media_type}-${r.id}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        results.push({
+          id: r.id,
+          media_type: r.media_type,
+          poster_path: r.poster_path,
+          vote_average: r.vote_average,
           title: r.title || r.name || '',
           release_date: r.release_date || r.first_air_date || '',
-        }))
+        })
+        if (results.length === 8) break
+      }
       setSearchResults(results)
       setShowSearchResults(true)
     } catch {
@@ -108,6 +121,15 @@ export default function Navbar() {
     setSearchInput('')
     setShowSearchResults(false)
     navigate(`/${mediaType}/${id}`)
+  }
+
+  const goToSearchPage = (query?: string) => {
+    const q = (query ?? searchInput).trim()
+    if (!q) return
+    setShowSearchResults(false)
+    setShowTrending(false)
+    setMenuOpen(false)
+    navigate(`/search?q=${encodeURIComponent(q)}`)
   }
 
   return (
@@ -153,6 +175,7 @@ export default function Navbar() {
                 type="text"
                 value={searchInput}
                 onChange={(e) => onSearchInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') goToSearchPage() }}
                 onFocus={() => {
                   if (!searchInput) setShowTrending(true)
                   else if (searchResults.length > 0) setShowSearchResults(true)
@@ -191,7 +214,7 @@ export default function Navbar() {
                 <div className="absolute top-full mt-2 w-full bg-surface-elevated border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
                   {searchResults.map(movie => (
                     <button
-                      key={movie.id}
+                      key={`${movie.media_type}-${movie.id}`}
                       onMouseDown={() => goToDetail(movie.id, movie.media_type)}
                       className="w-full flex items-center gap-3 p-2.5 hover:bg-surface-card transition-colors text-left"
                     >
@@ -212,6 +235,12 @@ export default function Navbar() {
                       </div>
                     </button>
                   ))}
+                  <button
+                    onMouseDown={() => goToSearchPage()}
+                    className="w-full text-center text-xs font-bold text-accent hover:text-white py-2.5 border-t border-zinc-800 transition-colors"
+                  >
+                    See all results for "{searchInput}"
+                  </button>
                 </div>
               )}
             </div>
@@ -238,6 +267,7 @@ export default function Navbar() {
           type="text"
           value={searchInput}
           onChange={(e) => onSearchInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') goToSearchPage() }}
           onFocus={() => {
             if (!searchInput) setShowTrending(true)
             else if (searchResults.length > 0) setShowSearchResults(true)
@@ -275,7 +305,7 @@ export default function Navbar() {
           <div className="absolute top-full mt-2 w-full bg-surface-elevated border border-zinc-800 rounded-xl overflow-hidden shadow-2xl z-50">
             {searchResults.map(movie => (
               <button
-                key={movie.id}
+                key={`${movie.media_type}-${movie.id}`}
                 onMouseDown={() => goToDetail(movie.id, movie.media_type)}
                 className="w-full flex items-center gap-3 p-2.5 hover:bg-surface-card transition-colors text-left"
               >
@@ -296,6 +326,12 @@ export default function Navbar() {
                 </div>
               </button>
             ))}
+            <button
+              onMouseDown={() => goToSearchPage()}
+              className="w-full text-center text-xs font-bold text-accent hover:text-white py-2.5 border-t border-zinc-800 transition-colors"
+            >
+              See all results for "{searchInput}"
+            </button>
           </div>
         )}
       </div>
