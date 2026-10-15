@@ -31,10 +31,19 @@ export interface DiscoverSort {
   tv: string
 }
 
+/** Runtime filter presets — minutes. Bands keep the UI to three pills. */
+export type RuntimeBand = 'short' | 'medium' | 'long'
+
+export function runtimeRange(band: RuntimeBand): { from: number | null; to: number | null } {
+  if (band === 'short') return { from: null, to: 90 }
+  if (band === 'medium') return { from: 90, to: 120 }
+  return { from: 120, to: null }
+}
+
 export interface DiscoverOptions {
   /** movie + tv sort fields */
   sort: DiscoverSort
-  /** provider ids are OR'd together by TMDB */
+  /** provider ids are OR'd together by TMDB; empty = no provider constraint */
   providerIds: number[]
   page: number
   /** true keeps vote_average.desc from surfacing 1-vote obscurities */
@@ -42,18 +51,36 @@ export interface DiscoverOptions {
   /** strip anime (genre 16) from the TV half so TV Series + Anime stay disjoint */
   excludeAnime?: boolean
   region?: string
+  /** content language for titles/overviews */
+  language?: string
+  /** earliest release/air year, inclusive */
+  yearFrom?: number | null
+  /** latest release/air year, inclusive */
+  yearTo?: number | null
+  /** vote_average.gte — a floor, so 7 shows 7.0 and up */
+  ratingFloor?: number | null
+  /** with_runtime.gte / .lte in minutes */
+  runtimeFrom?: number | null
+  runtimeTo?: number | null
 }
 
 export function buildDiscoverParams(opts: DiscoverOptions): URLSearchParams {
   const params = new URLSearchParams({
-    language: 'en-US',
+    language: opts.language ?? 'en-US',
     page: String(opts.page),
-    watch_region: opts.region ?? DEFAULT_REGION,
-    with_watch_providers: opts.providerIds.join('|'),
-    with_watch_monetization_types: 'flatrate',
     sort_by: opts.sort.movie,
   })
+  // Provider + region only constrain the query when a provider was picked;
+  // watch_region alone would silently narrow every discover request.
+  if (opts.providerIds.length > 0) {
+    params.set('watch_region', opts.region ?? DEFAULT_REGION)
+    params.set('with_watch_providers', opts.providerIds.join('|'))
+    params.set('with_watch_monetization_types', 'flatrate')
+  }
   if (opts.voteFloor) params.set('vote_count.gte', VOTE_COUNT_FLOOR)
+  if (opts.ratingFloor) params.set('vote_average.gte', String(opts.ratingFloor))
+  if (opts.runtimeFrom) params.set('with_runtime.gte', String(opts.runtimeFrom))
+  if (opts.runtimeTo) params.set('with_runtime.lte', String(opts.runtimeTo))
   return params
 }
 
@@ -63,6 +90,11 @@ export async function fetchDiscoverPage(opts: DiscoverOptions): Promise<Combined
     const params = buildDiscoverParams(opts)
     params.set('sort_by', opts.sort[kind])
     if (opts.excludeAnime && kind === 'tv') params.set('without_genres', ANIMATION_GENRE)
+    // Year bounds are per-kind date fields — movie and tv do not share one.
+    const dateGte = kind === 'movie' ? 'primary_release_date.gte' : 'first_air_date.gte'
+    const dateLte = kind === 'movie' ? 'primary_release_date.lte' : 'first_air_date.lte'
+    if (opts.yearFrom) params.set(dateGte, `${opts.yearFrom}-01-01`)
+    if (opts.yearTo) params.set(dateLte, `${opts.yearTo}-12-31`)
     return `/discover/${kind}?${params.toString()}`
   }
   const [movieData, tvData] = await Promise.all([

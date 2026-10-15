@@ -18,9 +18,26 @@ const WatchlistPage = lazy(() => import('./pages/WatchlistPage'))
 
 // Offline support: the service worker caches the app shell and viewed posters.
 // Production only — in dev it would serve stale bundles over HMR.
+//
+// The watchlist route is lazy, so its JS chunk has to be in the SW's asset cache
+// *before* the app is opened with no network — otherwise /watchlist boots the
+// shell and then dies on a chunk that was never fetched. Warm it as soon as the
+// worker controls this page (after activate/claim on the first visit; already
+// true on every later one).
+const warmOfflineChunks = () => {
+  if (!navigator.serviceWorker.controller) return
+  import('./pages/WatchlistPage').catch(() => {
+    // A failed warm must never affect the running page — the next online visit retries.
+  })
+}
+
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
+    navigator.serviceWorker.register('/sw.js').then((registration) => {
+      registration.active?.state === 'activated' && navigator.serviceWorker.controller
+        ? warmOfflineChunks()
+        : navigator.serviceWorker.addEventListener('controllerchange', warmOfflineChunks, { once: true })
+    }).catch((err) => {
       console.error('[sw] registration failed', err)
     })
   })

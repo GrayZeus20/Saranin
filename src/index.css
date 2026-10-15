@@ -9,7 +9,10 @@
   --color-accent-dim: #b8941a;
   --color-text-primary: #f5f5f5;
   --color-text-secondary: #a1a1aa;
-  --color-text-muted: #71717a;
+  /* #71717a was 4.1:1 on --color-surface — under the WCAG AA 4.5:1 floor for
+     the small text it is used on (captions, dates, helper lines). #8b8b93
+     clears it on surface, surface-elevated and surface-card alike. */
+  --color-text-muted: #8b8b93;
 }
 
 /* Single source of truth for the browser chrome colour on Android/iOS.

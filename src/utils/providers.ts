@@ -40,19 +40,22 @@ export interface CatalogEntry {
   logo_path: string
 }
 
-// Keyed by region: the old single-promise cache served Indonesia's catalog after
-// the user switched regions, which both mislabelled the pills and filtered the
-// grid against the wrong provider set.
+// Keyed by region AND locale: the old single-promise cache served Indonesia's
+// catalog after the user switched regions, which both mislabelled the pills and
+// filtered the grid against the wrong provider set. Locale joined the key when
+// the EN/ID toggle landed — provider names come back localized too, so a stale
+// en-US list under an id-ID session would mix languages in one filter bar.
 const catalogPromises = new Map<string, Promise<CatalogEntry[]>>()
 
-/** Watch providers available in the region, curated order first. Cached per region per session. */
-export function getRegionProviders(region: string = DEFAULT_REGION): Promise<CatalogEntry[]> {
-  const cached = catalogPromises.get(region)
+/** Watch providers available in the region, curated order first. Cached per region per locale per session. */
+export function getRegionProviders(region: string = DEFAULT_REGION, language: string = 'en-US'): Promise<CatalogEntry[]> {
+  const cacheKey = `${region}:${language}`
+  const cached = catalogPromises.get(cacheKey)
   if (cached) return cached
   const promise = (async () => {
     try {
       const data = await fetchWithRateLimit<ProviderCatalogResponse>(
-        `/watch/providers/movie?language=en-US&watch_region=${region}`
+        `/watch/providers/movie?language=${language}&watch_region=${region}`
       )
       const all = (data.results || []).map(p => ({
         provider_id: p.provider_id,
@@ -70,10 +73,15 @@ export function getRegionProviders(region: string = DEFAULT_REGION): Promise<Cat
         .filter(p => !featuredIds.has(p.provider_id))
         .sort((a, b) => a.provider_name.localeCompare(b.provider_name))
       return [...featured, ...rest]
-    } catch {
-      return []
+    } catch (err) {
+      // Do NOT remember failures. The old code cached the resolved [] forever,
+      // so one network blip left both filter bars stuck on "Loading platforms…"
+      // with no error and no retry — recovering required a full reload.
+      // Evicting the entry lets react-query's retry/reload fetch for real.
+      catalogPromises.delete(cacheKey)
+      throw err
     }
   })()
-  catalogPromises.set(region, promise)
+  catalogPromises.set(cacheKey, promise)
   return promise
 }

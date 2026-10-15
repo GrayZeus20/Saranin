@@ -4,16 +4,24 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import { toast } from 'sonner'
 import { ImageWithFallback } from './components/ImageWithFallback'
+import { TrailerHover } from './components/TrailerHover'
 import Navbar from './components/Navbar'
 import ScrollRow from './components/ScrollRow'
 import { WatchButton } from './components/WatchButton'
 import Footer from './components/Footer'
+import { DiscoverFilterSections, type DiscoverFilterValue } from './components/DiscoverFilterSections'
 import { fetchWithRateLimit, IMG_BASE, TMDB_TOKEN } from './utils/api'
 import { formatDate, GENRE_MAP } from './utils/constants'
 import { normalizeMovie, normalizeTv, dedupById, type Movie } from './utils/tmdb'
 import { getRegionProviders } from './utils/providers'
 import { useRegion } from './utils/region'
-import { fetchDiscoverPage, TMDB_MAX_PAGE, type CombinedPage, type TMDBListResponse, type DiscoverSort } from './utils/discover'
+import { useLocale } from './utils/locale'
+import { useWatchlist } from './utils/watchlist'
+import { useDocumentTitle } from './utils/useDocumentTitle'
+import {
+  fetchDiscoverPage, runtimeRange, TMDB_MAX_PAGE,
+  type CombinedPage, type TMDBListResponse, type DiscoverSort, type RuntimeBand,
+} from './utils/discover'
 
 // Environment validation
 if (!TMDB_TOKEN) {
@@ -40,10 +48,10 @@ const CATEGORY_SORT: Record<CategoryKey, DiscoverSort> = {
 
 // One request pair (movie + tv) == one visible page. No accumulation, no dedup drift:
 // each page replaces the previous one, so Prev/Next always moves forward.
-async function fetchCombinedPage(movieEndpoint: string, tvEndpoint: string, page: number): Promise<CombinedPage> {
+async function fetchCombinedPage(movieEndpoint: string, tvEndpoint: string, page: number, language: string): Promise<CombinedPage> {
   const [movieData, tvData] = await Promise.all([
-    fetchWithRateLimit<TMDBListResponse>(`${movieEndpoint}?language=en-US&page=${page}`),
-    fetchWithRateLimit<TMDBListResponse>(`${tvEndpoint}?language=en-US&page=${page}`),
+    fetchWithRateLimit<TMDBListResponse>(`${movieEndpoint}?language=${language}&page=${page}`),
+    fetchWithRateLimit<TMDBListResponse>(`${tvEndpoint}?language=${language}&page=${page}`),
   ])
   const items = dedupById(
     (movieData.results || []).map(normalizeMovie),
@@ -106,12 +114,13 @@ function RowSkeleton() {
   )
 }
 
-function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink, isError, onRetry }: {
+function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink, isLoading, isError, onRetry }: {
   title: string
   subtitle: string
   movies: Movie[]
   onMovieClick: (m: Movie) => void
   viewAllLink?: string
+  isLoading?: boolean
   isError?: boolean
   onRetry?: () => void
 }) {
@@ -147,20 +156,33 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink,
           )}
         </div>
       ) : isEmpty ? (
-        // Skeleton while the row resolves — prevents layout shift.
-        <RowSkeleton />
+        // Skeleton only while the row is actually in flight — a row that
+        // resolved with zero items must not shimmer forever.
+        isLoading ? <RowSkeleton /> : (
+          <p className="text-text-muted text-xs py-6">Nothing to show here right now.</p>
+        )
       ) : (
         <ScrollRow label={title} className="-mx-1">
           {movies.map(m => (
-            <div key={`${title}-${m.id}`} onClick={() => onMovieClick(m)} className="shrink-0 w-28 sm:w-32 md:w-36 cursor-pointer transition-transform duration-200 hover:scale-105 active:scale-95">
+            // movie and tv ids are separate TMDB namespaces and coexist in one
+            // rail, so the bare id is not a unique key here.
+            <div key={`${title}-${m.media_type ?? 'movie'}-${m.id}`} onClick={() => onMovieClick(m)} className="shrink-0 w-28 sm:w-32 md:w-36 cursor-pointer transition-transform duration-200 hover:scale-105 active:scale-95">
               <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
-                <ImageWithFallback src={posterUrl(m.poster_path)} alt={m.title} className="w-full h-full object-cover" />
+                <ImageWithFallback
+                  src={posterUrl(m.poster_path)}
+                  alt={m.title}
+                  className="w-full h-full object-cover"
+                  sizes="(min-width: 768px) 144px, (min-width: 640px) 128px, 112px"
+                />
+                {/* Hover preview sits right after the image; card chrome
+                    (gradient, badges, save button) paints over it. */}
+                <TrailerHover mediaType={m.media_type === 'tv' ? 'tv' : 'movie'} id={m.id} title={m.title} />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
                 <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1.5 py-0.5 rounded">
                   &#9733; {m.vote_average?.toFixed(1)}
                 </div>
                 <WatchButton
-                  className="!bottom-1.5 !right-1.5 !w-7 !h-7"
+                  compact
                   entry={{ id: m.id, media_type: m.media_type === 'tv' ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
                 />
               </div>
@@ -196,9 +218,43 @@ export default function App() {
   const rawType = searchParams.get('type')
   const contentType: ContentType = rawType === 'movie' || rawType === 'tv' || rawType === 'anime' || rawType === 'all' ? rawType : 'movie'
 
+  // --- Discover filters: year / rating floor / runtime ---
+  // Validated like every other URL value — a hand-edited `year=abc` must not
+  // poison the query key or ship `NaN` to TMDB.
+  const yearFrom = useMemo(() => {
+    const n = parseInt(searchParams.get('year_from') || '', 10)
+    return Number.isFinite(n) && n > 1800 && n < 2100 ? n : null
+  }, [searchParams])
+  const yearTo = useMemo(() => {
+    const n = parseInt(searchParams.get('year_to') || '', 10)
+    return Number.isFinite(n) && n > 1800 && n < 2100 ? n : null
+  }, [searchParams])
+  const ratingFloor = useMemo(() => {
+    const n = Number(searchParams.get('rating'))
+    return Number.isFinite(n) && n > 0 && n <= 10 ? n : null
+  }, [searchParams])
+  const rawRuntime = searchParams.get('runtime')
+  const runtimeBand: RuntimeBand | null = rawRuntime === 'short' || rawRuntime === 'medium' || rawRuntime === 'long' ? rawRuntime : null
+  const discoverFilterValue: DiscoverFilterValue = { yearFrom, yearTo, ratingFloor, runtimeBand }
+  const discoverFilterCount = (yearFrom !== null || yearTo !== null ? 1 : 0) + (ratingFloor !== null ? 1 : 0) + (runtimeBand !== null ? 1 : 0)
+  const hasDiscoverFilters = discoverFilterCount > 0
+
   const [showGenres, setShowGenres] = useState(() => searchParams.get('filters') === '1')
 
   const { region } = useRegion()
+  const { locale } = useLocale()
+  const { items: watchlistItems } = useWatchlist()
+
+  // --- Scroll key: the URL minus the `filters` flag ---
+  // Opening the filter panel writes `filters=1` to the URL (so the panel
+  // survives a Back from a detail page), but it is NOT a view change. The key
+  // is built from a copy of the params with `filters` removed, so panel
+  // toggling is invisible to the scroll machinery below.
+  const scrollKey = useMemo(() => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('filters')
+    return next.toString()
+  }, [searchParams])
 
   // Single writer for the URL. `replace` is the default so filter toggling does
   // not stack history entries; paging pushes so Back walks pages, and returning
@@ -215,25 +271,41 @@ export default function App() {
     }, { replace: !opts?.push })
   }, [setSearchParams])
 
-  // --- Page scroll: top on forward navigation, restored on Back/Forward ---
+  // --- Page scroll ---
+  // Rule, after the filter-scroll bug: only Back/Forward and a genuine view
+  // change may move the viewport.
+  //   POP     → restore the position saved for this exact URL
+  //   REPLACE → filter writes (panel toggle, every pill) — never scroll. This
+  //             was the reported bug: the open panel slid out of view.
+  //   PUSH    → the pager rewrites only `page` and scrolls itself to the grid;
+  //             any other push is a fresh view and starts at the top.
+  const lastScrollStateRef = useRef<{ scrollKey: string; viewKey: string } | null>(null)
   useEffect(() => {
-    const key = `saranin:scroll:home:${searchParams.toString()}`
+    // "The view, ignoring which page" — a page-only change is the pager.
+    const params = new URLSearchParams(scrollKey)
+    params.delete('page')
+    const viewKey = params.toString()
+    const prev = lastScrollStateRef.current
+    lastScrollStateRef.current = { scrollKey, viewKey }
+
     if (navigationType === 'POP') {
       let saved = 0
       try {
-        saved = Number(sessionStorage.getItem(key)) || 0
+        saved = Number(sessionStorage.getItem(`saranin:scroll:home:${scrollKey}`)) || 0
       } catch {
         // storage blocked — staying at the top is acceptable
       }
       if (saved > 0) window.scrollTo({ top: saved })
       return
     }
+    if (navigationType === 'REPLACE') return
+    if (prev && prev.viewKey === viewKey && prev.scrollKey !== scrollKey) return
     window.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [searchParams, navigationType])
+  }, [scrollKey, navigationType])
 
   // Record the scroll position so a later Back can land where the user left.
   useEffect(() => {
-    const key = `saranin:scroll:home:${searchParams.toString()}`
+    const key = `saranin:scroll:home:${scrollKey}`
     let ticking = false
     const onScroll = () => {
       if (ticking) return
@@ -249,33 +321,44 @@ export default function App() {
     }
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
-  }, [searchParams])
+  }, [scrollKey])
 
   const gridTopRef = useRef<HTMLDivElement>(null)
 
   // --- Current page query: exactly one TMDB page per view ---
+  // The discover path is used whenever the request cannot be expressed by the
+  // plain list endpoints: a platform filter, or any of the year/rating/runtime
+  // filters (those exist only on /discover).
   const endpoints = CATEGORY_ENDPOINTS[activeCategory] ?? CATEGORY_ENDPOINTS.now_playing
+  const useDiscover = activePlatform !== null || hasDiscoverFilters
+  const runtime = runtimeBand ? runtimeRange(runtimeBand) : { from: null, to: null }
   const pageQuery = useQuery({
-    queryKey: ['home', activeCategory, currentPage, activePlatform, region],
-    queryFn: () => activePlatform === null
-      ? fetchCombinedPage(endpoints.movie, endpoints.tv, currentPage)
-      : fetchDiscoverPage({
+    queryKey: ['home', activeCategory, currentPage, activePlatform, region, locale, yearFrom, yearTo, ratingFloor, runtimeBand],
+    queryFn: () => useDiscover
+      ? fetchDiscoverPage({
           sort: CATEGORY_SORT[activeCategory] ?? CATEGORY_SORT.now_playing,
-          providerIds: [activePlatform],
+          providerIds: activePlatform !== null ? [activePlatform] : [],
           page: currentPage,
           voteFloor: activeCategory === 'top_rated',
           excludeAnime: true,
           region,
-        }),
+          language: locale,
+          yearFrom,
+          yearTo,
+          ratingFloor,
+          runtimeFrom: runtime.from,
+          runtimeTo: runtime.to,
+        })
+      : fetchCombinedPage(endpoints.movie, endpoints.tv, currentPage, locale),
     placeholderData: keepPreviousData,
     retry: 2,
     retryDelay: 1000,
   })
 
   // --- Region streaming catalog for the Platform filter ---
-  const { data: regionProviders } = useQuery({
-    queryKey: ['region_providers', region],
-    queryFn: () => getRegionProviders(region),
+  const { data: regionProviders, isError: providersError, refetch: refetchProviders } = useQuery({
+    queryKey: ['region_providers', region, locale],
+    queryFn: () => getRegionProviders(region, locale),
     staleTime: Infinity,
     retry: 1,
   })
@@ -283,25 +366,47 @@ export default function App() {
 
   // --- Row previews: fixed page 1, movie + tv per row ---
   const trendingRow = useQuery({
-    queryKey: ['row', 'trending'],
-    queryFn: () => fetchCombinedPage('/trending/movie/week', '/trending/tv/week', 1),
+    queryKey: ['row', 'trending', locale],
+    queryFn: () => fetchCombinedPage('/trending/movie/week', '/trending/tv/week', 1, locale),
     retry: 2,
   })
   const popularRow = useQuery({
-    queryKey: ['row', 'popular'],
-    queryFn: () => fetchCombinedPage('/movie/popular', '/tv/popular', 1),
+    queryKey: ['row', 'popular', locale],
+    queryFn: () => fetchCombinedPage('/movie/popular', '/tv/popular', 1, locale),
     retry: 2,
   })
   const topRatedRow = useQuery({
-    queryKey: ['row', 'top_rated'],
-    queryFn: () => fetchCombinedPage('/movie/top_rated', '/tv/top_rated', 1),
+    queryKey: ['row', 'top_rated', locale],
+    queryFn: () => fetchCombinedPage('/movie/top_rated', '/tv/top_rated', 1, locale),
     retry: 2,
   })
+
+  // --- "Because you saved X": recommendations seeded by the newest watchlist entry ---
+  // The seed is the most recently ADDED title; the rail asks TMDB what it
+  // recommends for it. One request, page 1, cached per seed.
+  const seed = watchlistItems[0]
+  const seedType = seed?.media_type === 'tv' ? 'tv' : 'movie'
+  const becauseYouSaved = useQuery({
+    queryKey: ['because-you-saved', seedType, seed?.id, locale],
+    queryFn: async () => {
+      const data = await fetchWithRateLimit<TMDBListResponse>(
+        `/${seedType}/${seed!.id}/recommendations?language=${locale}&page=1`
+      )
+      const items = (data.results || []).map(r => (seedType === 'tv' ? normalizeTv(r) : normalizeMovie(r)))
+      return items.slice(0, 16)
+    },
+    enabled: !!seed,
+    staleTime: 30 * 60 * 1000,
+    retry: 1,
+  })
+  const becauseYouSavedItems = useMemo(() => becauseYouSaved.data ?? [], [becauseYouSaved.data])
 
   const pageItems = useMemo(() => pageQuery.data?.items ?? [], [pageQuery.data])
   const totalPages = pageQuery.data?.totalPages ?? 1
   const isPageLoading = pageQuery.isLoading
   const isPageFetching = pageQuery.isFetching
+
+  useDocumentTitle(`${endpoints.label} — SARANIN.`)
 
   // Failed page change must not nuke the screen — only the very first load owns the error page.
   useEffect(() => {
@@ -342,10 +447,18 @@ export default function App() {
   const featured = isFirstPage ? filteredMovies[0] : undefined
   const gridMovies = isFirstPage ? filteredMovies.slice(1) : filteredMovies
 
+  const scrollToGrid = useCallback(() => {
+    gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
+  // Paging is the one action that moves the viewport itself — to the top of the
+  // grid, not the very top of the page. A filter that resets the page number
+  // must NOT scroll, which is why the scroll effect ignores page changes.
   const goToPage = useCallback((next: number) => {
     const page = Math.max(1, next)
     updateParams({ page: page === 1 ? null : String(page) }, { push: true })
-  }, [updateParams])
+    scrollToGrid()
+  }, [updateParams, scrollToGrid])
 
   const toggleCategory = useCallback((key: CategoryKey) => {
     // Category defaults back to now_playing / movie / no genres — same reset the
@@ -380,20 +493,31 @@ export default function App() {
     updateParams({ type: type === 'movie' ? null : type })
   }, [updateParams])
 
+  // Year / rating / runtime are server-side constraints, so any change starts a
+  // new result set — page resets, history entry replaced.
+  const setDiscoverFilters = useCallback((next: DiscoverFilterValue) => {
+    updateParams({
+      year_from: next.yearFrom === null ? null : String(next.yearFrom),
+      year_to: next.yearTo === null ? null : String(next.yearTo),
+      rating: next.ratingFloor === null ? null : String(next.ratingFloor),
+      runtime: next.runtimeBand,
+      page: null,
+    })
+  }, [updateParams])
+
   // One writer for "back to defaults": every filter key plus the page number, in
   // a single history entry. Both the header Reset and the empty-state Reset All
   // Filters route through this, so the two can never drift apart.
   const resetFilters = useCallback(() => {
-    updateParams({ cat: null, genres: null, provider: null, type: null, page: null })
+    updateParams({
+      cat: null, genres: null, provider: null, type: null, page: null,
+      year_from: null, year_to: null, rating: null, runtime: null,
+    })
   }, [updateParams])
-
-  const scrollToGrid = useCallback(() => {
-    gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [])
 
   // 'movie' is the default view, not a filter — counting it showed a badge of 1
   // on a pristine home. Deviation from the default is what counts.
-  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'movie' ? 1 : 0)
+  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'movie' ? 1 : 0) + discoverFilterCount
   // `activeFilterCount` drives the badge; the Reset control must also appear when
   // only the category moved, since resetFilters clears that too.
   const hasActiveFilters = activeFilterCount > 0 || activeCategory !== 'now_playing'
@@ -401,33 +525,46 @@ export default function App() {
   const trendingRowItems = useMemo(() => (trendingRow.data?.items ?? []).slice(0, 16), [trendingRow.data])
   const popularRowItems = useMemo(() => (popularRow.data?.items ?? []).slice(0, 16), [popularRow.data])
   const topRatedRowItems = useMemo(() => (topRatedRow.data?.items ?? []).slice(0, 16), [topRatedRow.data])
+  // The seed itself must not appear in its own recommendation rail.
+  const becauseYouSavedFiltered = useMemo(
+    () => seed
+      ? becauseYouSavedItems.filter(m => !(m.id === seed.id && (m.media_type ?? 'movie') === seed.media_type))
+      : [],
+    [becauseYouSavedItems, seed],
+  )
 
   if (pageQuery.isError && !pageQuery.data) {
     return (
-      <div className="min-h-[100dvh] bg-surface flex items-center justify-center px-6">
-        <div className="text-center max-w-sm">
-          <p className="text-5xl mb-4">&#x1f3ac;</p>
-          <p className="text-text-primary text-lg font-semibold mb-2">Something went wrong</p>
-          <p className="text-text-muted text-sm">{(pageQuery.error as Error)?.message || 'Failed to load content'}</p>
-          <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
-            <button
-              onClick={() => pageQuery.refetch()}
-              className="bg-accent text-black text-sm font-bold px-6 py-2.5 rounded-full active:scale-95 transition-transform"
-            >
-              Try Again
-            </button>
-            {/* A failing URL is often the fault of its own params — without this
-                escape hatch the user is stuck retrying a request that cannot heal. */}
-            {(hasActiveFilters || currentPage > 1) && (
-              <button
-                onClick={resetFilters}
-                className="text-text-muted text-sm font-bold px-6 py-2.5 rounded-full border border-zinc-800 hover:border-red-500 hover:text-red-400 transition-all active:scale-95"
-              >
-                Reset Filters
-              </button>
-            )}
+      <div className="min-h-[100dvh] bg-surface">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 md:px-12 py-5 md:py-8">
+          <Navbar />
+          <div className="flex items-center justify-center py-24 px-6">
+            <div className="text-center max-w-sm">
+              <p className="text-5xl mb-4">&#x1f3ac;</p>
+              <p className="text-text-primary text-lg font-semibold mb-2">Something went wrong</p>
+              <p className="text-text-muted text-sm">{(pageQuery.error as Error)?.message || 'Failed to load content'}</p>
+              <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
+                <button
+                  onClick={() => pageQuery.refetch()}
+                  className="bg-accent text-black text-sm font-bold px-6 py-2.5 rounded-full active:scale-95 transition-transform"
+                >
+                  Try Again
+                </button>
+                {/* A failing URL is often the fault of its own params — without this
+                    escape hatch the user is stuck retrying a request that cannot heal. */}
+                {(hasActiveFilters || currentPage > 1) && (
+                  <button
+                    onClick={resetFilters}
+                    className="text-text-muted text-sm font-bold px-6 py-2.5 rounded-full border border-zinc-800 hover:border-red-500 hover:text-red-400 transition-all active:scale-95"
+                  >
+                    Reset Filters
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
+        <Footer />
       </div>
     )
   }
@@ -457,6 +594,7 @@ export default function App() {
           <img
             src={`${IMG_BASE}/w1280${featured.backdrop_path}`}
             alt=""
+            onError={(e) => { e.currentTarget.style.display = 'none' }}
             className="w-full h-[55vh] object-cover object-top opacity-20 blur-3xl scale-125"
             style={{ maskImage: 'linear-gradient(to bottom, black, transparent 85%)', WebkitMaskImage: 'linear-gradient(to bottom, black, transparent 85%)' }}
           />
@@ -482,11 +620,20 @@ export default function App() {
                   alt={featured.title}
                   fetchPriority="high"
                   decoding="async"
+                  onError={(e) => { e.currentTarget.style.display = 'none' }}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
               ) : (
                 <div className="w-full h-full bg-surface-card flex items-center justify-center text-zinc-700 text-4xl font-black">{featured.title}</div>
               )}
+              {/* Hover the hero → muted trailer behind the copy (pointer-fine only).
+                  Gradients and copy are later siblings, so they keep painting above it. */}
+              <TrailerHover
+                mediaType={featured.media_type === 'tv' ? 'tv' : 'movie'}
+                id={featured.id}
+                title={featured.title}
+                zoomClass="scale-[1.18]"
+              />
               {/* Gradient overlays */}
               <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/60 to-transparent" />
               <div className="absolute inset-0 bg-gradient-to-r from-surface/80 to-transparent" />
@@ -545,17 +692,33 @@ export default function App() {
         {/* Movie Category Sections — page 1 only */}
         {isFirstPage && (
           <>
+            {/* Because-you-saved sits first: it is the only personalised rail,
+                and it only exists once the user has saved something. */}
+            {seed && (
+              <div>
+                <HorizontalSection
+                  title={`Because you saved ${seed.title}`}
+                  subtitle="Recommendations from your watchlist"
+                  movies={becauseYouSavedFiltered}
+                  onMovieClick={openDetail}
+                  viewAllLink="/watchlist"
+                  isLoading={becauseYouSaved.isLoading}
+                  isError={becauseYouSaved.isError}
+                  onRetry={() => becauseYouSaved.refetch()}
+                />
+              </div>
+            )}
             <div>
               <HorizontalSection title="Trending" subtitle="What's hot this week" movies={trendingRowItems} onMovieClick={openDetail} viewAllLink="/category/trending"
-                isError={trendingRow.isError} onRetry={() => trendingRow.refetch()} />
+                isLoading={trendingRow.isLoading} isError={trendingRow.isError} onRetry={() => trendingRow.refetch()} />
             </div>
             <div>
               <HorizontalSection title="Popular" subtitle="Most watched right now" movies={popularRowItems} onMovieClick={openDetail} viewAllLink="/category/popular"
-                isError={popularRow.isError} onRetry={() => popularRow.refetch()} />
+                isLoading={popularRow.isLoading} isError={popularRow.isError} onRetry={() => popularRow.refetch()} />
             </div>
             <div>
               <HorizontalSection title="Top Rated" subtitle="Critics' picks" movies={topRatedRowItems} onMovieClick={openDetail} viewAllLink="/category/top_rated"
-                isError={topRatedRow.isError} onRetry={() => topRatedRow.refetch()} />
+                isLoading={topRatedRow.isLoading} isError={topRatedRow.isError} onRetry={() => topRatedRow.refetch()} />
             </div>
           </>
         )}
@@ -663,6 +826,9 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Year / rating / runtime — server-side via /discover */}
+                <DiscoverFilterSections value={discoverFilterValue} onChange={setDiscoverFilters} />
+
                 {/* Platform Section — server-side filter against the region catalog */}
                 <div className="mt-4 pb-4 border-b border-zinc-800/50">
                   <div className="flex items-baseline gap-2 mb-3">
@@ -696,6 +862,7 @@ export default function App() {
                           <img
                             src={`${IMG_BASE}/w45${p.logo_path}`}
                             alt={p.provider_name}
+                            onError={(e) => { e.currentTarget.style.display = 'none' }}
                             className="w-4 h-4 rounded-sm object-cover"
                             loading="lazy"
                           />
@@ -705,7 +872,16 @@ export default function App() {
                     ))}
                   </div>
                   {platformOptions.length === 0 && (
-                    <p className="text-text-muted text-[10px] mt-2">Loading platforms…</p>
+                    providersError ? (
+                      <p className="text-text-muted text-[10px] mt-2">
+                        Couldn't load platforms.{' '}
+                        <button type="button" onClick={() => refetchProviders()} className="text-accent font-bold hover:text-white transition-colors">
+                          Retry
+                        </button>
+                      </p>
+                    ) : (
+                      <p className="text-text-muted text-[10px] mt-2">Loading platforms…</p>
+                    )
                   )}
                 </div>
 
@@ -746,7 +922,7 @@ export default function App() {
           <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-8">
             {gridMovies.map((movie, i) => (
               <motion.article
-                key={`${activeCategory}-${movie.id}`}
+                key={`${activeCategory}-${movie.media_type ?? 'movie'}-${movie.id}`}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.98 }}
                 initial={{ opacity: 0, y: 30 }}
@@ -761,11 +937,15 @@ export default function App() {
               >
                 <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
                   {movie.poster_path ? (
-                    <ImageWithFallback
-                      src={`${IMG_BASE}/w342${movie.poster_path}`}
-                      alt={movie.title}
-                      className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-                    />
+                    <>
+                      <ImageWithFallback
+                        src={`${IMG_BASE}/w342${movie.poster_path}`}
+                        alt={movie.title}
+                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                        sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw"
+                      />
+                      <TrailerHover mediaType={movie.media_type === 'tv' ? 'tv' : 'movie'} id={movie.id} title={movie.title} />
+                    </>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-zinc-700 text-sm font-bold">{movie.title?.charAt(0)}</div>
                   )}
@@ -781,12 +961,18 @@ export default function App() {
                   <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
                     &#9733; {movie.vote_average?.toFixed(1)}
                   </div>
+                  {/* TV badge — every other grid marks mixed tv/movie lists;
+                      the anime badge below stacks under it for tv entries. */}
+                  {movie.media_type === 'tv' && (
+                    <div className="absolute top-2 left-2 bg-accent text-black text-[9px] font-bold px-1.5 py-0.5 rounded-md">TV</div>
+                  )}
                   {/* Anime badge */}
                   {isAnime(movie) && (
-                    <div className={`absolute top-2 left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md ${movie.media_type === 'tv' ? 'top-8' : ''}`}>Anime</div>
+                    <div className={`${movie.media_type === 'tv' ? 'top-[26px]' : 'top-2'} absolute left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md`}>Anime</div>
                   )}
                   {/* Watchlist save — same control as the rails and detail page */}
                   <WatchButton
+                    compact
                     entry={{ id: movie.id, media_type: movie.media_type === 'tv' ? 'tv' : 'movie', title: movie.title, poster_path: movie.poster_path, vote_average: movie.vote_average, release_date: movie.release_date }}
                   />
                   {/* Bottom info */}
@@ -846,7 +1032,7 @@ export default function App() {
             {/* Smart suggestions based on current filters */}
             <div className="flex flex-wrap justify-center gap-2">
               <button
-                onClick={() => { scrollToGrid(); goToPage(currentPage + 1) }}
+                onClick={() => goToPage(currentPage + 1)}
                 disabled={isPageFetching || currentPage >= totalPages}
                 className="text-xs font-medium px-4 py-2 rounded-full bg-surface-elevated text-text-muted border border-zinc-800 hover:border-accent hover:text-accent transition-all disabled:opacity-30 disabled:cursor-not-allowed"
               >

@@ -3,7 +3,9 @@ import { useParams, Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
+import { ImageWithFallback } from '../components/ImageWithFallback'
 import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
+import { useLocale } from '../utils/locale'
 import { useDocumentTitle } from '../utils/useDocumentTitle'
 
 interface PersonDetail {
@@ -68,14 +70,23 @@ function creditSubtitle(credit: CastCredit | CrewCredit, tab: 'cast' | 'crew') {
   )
 }
 
+// TMDB sends date-only strings ("1974-11-11"). new Date() parses those as UTC
+// midnight, so toLocaleDateString rendered the PREVIOUS day for anyone west of
+// UTC (and getAge inherited the same off-by-one near a birthday). Parse the
+// parts explicitly into a local date.
+function parseDateOnly(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, (m || 1) - 1, d || 1)
+}
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return 'Unknown'
-  return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  return parseDateOnly(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
 function getAge(birthday: string, deathday?: string | null): number {
-  const birth = new Date(birthday)
-  const end = deathday ? new Date(deathday) : new Date()
+  const birth = parseDateOnly(birthday)
+  const end = deathday ? parseDateOnly(deathday) : new Date()
   const age = end.getFullYear() - birth.getFullYear()
   const m = end.getMonth() - birth.getMonth()
   if (m < 0 || (m === 0 && end.getDate() < birth.getDate())) return age - 1
@@ -90,6 +101,7 @@ export default function PersonDetailPage() {
   const [activeTab, setActiveTab] = useState<'cast' | 'crew'>('cast')
   const [visibleCount, setVisibleCount] = useState(FILMOGRAPHY_PAGE)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { locale } = useLocale()
 
   useDocumentTitle(person ? `${person.name} — SARANIN.` : '')
 
@@ -108,8 +120,8 @@ export default function PersonDetailPage() {
     setLoading(true)
     const controller = new AbortController()
     Promise.all([
-      fetchWithRateLimit<PersonDetail>(`/person/${id}?language=en-US`, { signal: controller.signal }),
-      fetchWithRateLimit<CreditsResponse>(`/person/${id}/combined_credits?language=en-US`, { signal: controller.signal }),
+      fetchWithRateLimit<PersonDetail>(`/person/${id}?language=${locale}`, { signal: controller.signal }),
+      fetchWithRateLimit<CreditsResponse>(`/person/${id}/combined_credits?language=${locale}`, { signal: controller.signal }),
     ]).then(([personData, creditsData]) => {
       // Normalize TV credits: name→title, first_air_date→release_date
       const normalize = (arr: any[]) => arr.map(c => ({
@@ -131,7 +143,7 @@ export default function PersonDetailPage() {
       }
     })
     return () => controller.abort()
-  }, [id])
+  }, [id, locale])
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -199,17 +211,14 @@ export default function PersonDetailPage() {
           >
             {/* Photo */}
             <div className="shrink-0 w-40 sm:w-48 mx-auto sm:mx-0">
-              {person.profile_path ? (
-                <img
-                  src={`${IMG_BASE}/w500${person.profile_path}`}
+              <div className="relative overflow-hidden rounded-xl shadow-2xl border border-zinc-800">
+                <ImageWithFallback
+                  src={person.profile_path ? `${IMG_BASE}/w342${person.profile_path}` : ''}
                   alt={person.name}
-                  className="w-full aspect-[2/3] object-cover rounded-xl shadow-2xl border border-zinc-800"
+                  className="w-full aspect-[2/3] object-cover"
+                  sizes="(min-width: 640px) 192px, 160px"
                 />
-              ) : (
-                <div className="w-full aspect-[2/3] bg-surface-card rounded-xl flex items-center justify-center text-zinc-700 text-4xl font-black border border-zinc-800">
-                  {person.name.charAt(0)}
-                </div>
-              )}
+              </div>
             </div>
 
             {/* Info */}
@@ -303,17 +312,14 @@ export default function PersonDetailPage() {
                     to={`/${credit.media_type || 'movie'}/${credit.id}`}
                     className="flex gap-4 p-3 rounded-xl bg-surface-elevated border border-zinc-800/50 hover:border-zinc-600 transition-all group"
                   >
-                    <div className="shrink-0 w-12 h-16 rounded-lg overflow-hidden bg-surface-card">
-                      {credit.poster_path ? (
-                        <img
-                          src={`${IMG_BASE}/w342${credit.poster_path}`}
-                          alt={credit.title}
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-zinc-700 text-xs font-bold">{credit.media_type === 'tv' ? '📺' : '🎬'}</div>
-                      )}
+                    <div className="relative shrink-0 w-12 h-16 rounded-lg overflow-hidden bg-surface-card">
+                      <ImageWithFallback
+                        src={credit.poster_path ? `${IMG_BASE}/w185${credit.poster_path}` : ''}
+                        alt={credit.title}
+                        className="w-full h-full object-cover"
+                        fallbackText={credit.media_type === 'tv' ? '📺' : '🎬'}
+                        sizes="48px"
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-text-primary text-sm font-bold line-clamp-1 group-hover:text-accent transition-colors">

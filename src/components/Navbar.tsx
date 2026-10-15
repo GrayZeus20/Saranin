@@ -1,9 +1,12 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo, type FocusEvent } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
+import { ImageWithFallback } from './ImageWithFallback'
 import { REGION_MAP } from '../utils/constants'
 import { useRegion } from '../utils/region'
+import { useLocale, type Locale } from '../utils/locale'
+import { useSearchHistory } from '../utils/searchHistory'
 
 interface SearchResult {
   id: number
@@ -42,7 +45,7 @@ const TRENDING_SEARCHES = ['One Piece', 'Demon Slayer', 'Naruto', 'Dragon Ball',
 // markup, and a fix to one silently missed the other. One renderer now serves
 // both; only the sizing classes differ.
 function SearchField({
-  variant, searchInput, onSearchInput, onEnter, onKeyNav, onFocus, onBlur,
+  variant, searchInput, onSearchInput, onEnter, onKeyNav, onFocus, onBlur, expanded, listboxId,
 }: {
   variant: 'desktop' | 'mobile'
   searchInput: string
@@ -50,7 +53,9 @@ function SearchField({
   onEnter: () => void
   onKeyNav: (key: 'ArrowDown' | 'ArrowUp' | 'Escape') => boolean
   onFocus: () => void
-  onBlur: () => void
+  onBlur: (e: FocusEvent<HTMLInputElement>) => void
+  expanded: boolean
+  listboxId: string
 }) {
   const isDesktop = variant === 'desktop'
   // Padding is set per variant and never layered: `pr-4` combined with `pr-3`
@@ -81,7 +86,8 @@ function SearchField({
         onBlur={onBlur}
         placeholder="Search movies, TV, anime..."
         role="combobox"
-        aria-expanded={false}
+        aria-expanded={expanded}
+        aria-controls={listboxId}
         aria-autocomplete="list"
         className={`w-full bg-surface-elevated border border-zinc-800 text-text-primary pl-9 rounded-full focus:border-accent focus:outline-none transition-colors placeholder:text-zinc-600 ${sizing}`}
       />
@@ -89,24 +95,65 @@ function SearchField({
   )
 }
 
-// Dropdown shared by both variants — trending terms when idle, results once a
-// query resolves, plus the "see all" row. The result list is a listbox: the
-// input keeps focus and moves `activeIndex` with the arrow keys.
+// Dropdown shared by both variants — recent searches + trending terms when
+// idle, results once a query resolves, plus the "see all" row. The result list
+// is a listbox: the input keeps focus and moves `activeIndex` with arrow keys.
 function SearchPanel({
-  showTrending, showSearchResults, searchResults, activeIndex, searchInput, onPickTerm, onPickResult, onSeeAll,
+  id, showTrending, showSearchResults, searchResults, activeIndex, searchInput, recentSearches,
+  onPickTerm, onPickResult, onSeeAll, onRemoveRecent, onClearRecent,
 }: {
+  id: string
   showTrending: boolean
   showSearchResults: boolean
   searchResults: SearchResult[]
   activeIndex: number
   searchInput: string
+  recentSearches: string[]
   onPickTerm: (term: string) => void
   onPickResult: (id: number, mediaType: 'movie' | 'tv') => void
   onSeeAll: () => void
+  onRemoveRecent: (term: string) => void
+  onClearRecent: () => void
 }) {
   if (showTrending && !searchInput) {
     return (
-      <div className="absolute top-full mt-2 w-full bg-surface-elevated border border-zinc-800 rounded-xl overflow-hidden shadow-2xl z-50">
+      <div id={id} data-search-panel className="absolute top-full mt-2 w-full bg-surface-elevated border border-zinc-800 rounded-xl overflow-hidden shadow-2xl z-50">
+        {/* Recent searches first — the user's own history beats our defaults. */}
+        {recentSearches.length > 0 && (
+          <>
+            <div className="p-2.5 border-b border-zinc-800 flex items-center justify-between">
+              <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold">Recent</p>
+              <button
+                type="button"
+                onClick={onClearRecent}
+                className="text-text-muted text-[10px] font-bold hover:text-red-400 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="p-2 flex flex-wrap gap-2 border-b border-zinc-800">
+              {recentSearches.map(term => (
+                <span key={term} className="inline-flex items-center rounded-full bg-surface-card overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => onPickTerm(term)}
+                    className="text-xs font-medium pl-3 pr-1 py-1.5 text-text-muted hover:text-accent transition-colors"
+                  >
+                    {term}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveRecent(term)}
+                    aria-label={`Remove "${term}" from recent searches`}
+                    className="text-text-muted/70 hover:text-red-400 text-[10px] leading-none px-2 py-1.5 transition-colors"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          </>
+        )}
         <div className="p-2.5 border-b border-zinc-800">
           <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold">Trending Searches</p>
         </div>
@@ -115,7 +162,7 @@ function SearchPanel({
             <button
               key={term}
               type="button"
-              onMouseDown={() => onPickTerm(term)}
+              onClick={() => onPickTerm(term)}
               className="text-xs font-medium px-3 py-1.5 rounded-full bg-surface-card text-text-muted hover:text-accent hover:bg-surface transition-colors"
             >
               {term}
@@ -128,7 +175,7 @@ function SearchPanel({
 
   if (showSearchResults && searchResults.length > 0) {
     return (
-      <div className="absolute top-full mt-2 w-full bg-surface-elevated border border-zinc-800 rounded-xl overflow-hidden shadow-2xl z-50">
+      <div id={id} data-search-panel className="absolute top-full mt-2 w-full bg-surface-elevated border border-zinc-800 rounded-xl overflow-hidden shadow-2xl z-50">
         {/* aria-live announces the result count as the user types. */}
         <p className="sr-only" aria-live="polite">
           {searchResults.length} results available. Use the up and down arrow keys to review them.
@@ -139,17 +186,19 @@ function SearchPanel({
               <button
                 type="button"
                 tabIndex={-1}
-                onMouseDown={() => onPickResult(movie.id, movie.media_type)}
+                onClick={() => onPickResult(movie.id, movie.media_type)}
                 className={`w-full flex items-center gap-3 p-2.5 transition-colors text-left ${
                   index === activeIndex ? 'bg-surface-card' : 'hover:bg-surface-card'
                 }`}
               >
-                <div className="w-8 h-12 rounded-md overflow-hidden bg-surface-card shrink-0">
-                  {movie.poster_path ? (
-                    <img src={`${IMG_BASE}/w92${movie.poster_path}`} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-zinc-700 text-xs">🎬</div>
-                  )}
+                <div className="relative w-8 h-12 rounded-md overflow-hidden bg-surface-card shrink-0">
+                  <ImageWithFallback
+                    src={movie.poster_path ? `${IMG_BASE}/w92${movie.poster_path}` : ''}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    fallbackText="🎬"
+                    sizes="32px"
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-text-primary text-xs font-bold line-clamp-1">{movie.title}</p>
@@ -165,7 +214,7 @@ function SearchPanel({
         </ul>
         <button
           type="button"
-          onMouseDown={onSeeAll}
+          onClick={onSeeAll}
           className="w-full text-center text-xs font-bold text-accent hover:text-white py-2.5 border-t border-zinc-800 transition-colors"
         >
           See all results for "{searchInput}"
@@ -258,6 +307,26 @@ function RegionSelect({ compact = false }: { compact?: boolean }) {
   )
 }
 
+// Language toggle — which language TMDB serves overviews/titles in. A two-way
+// switch, so it is one button, not a dropdown.
+function LocaleToggle({ compact = false }: { compact?: boolean }) {
+  const { locale, setLocale } = useLocale()
+  const next: Locale = locale === 'en-US' ? 'id-ID' : 'en-US'
+  return (
+    <button
+      type="button"
+      onClick={() => setLocale(next)}
+      aria-label={`Switch content language to ${next === 'id-ID' ? 'Indonesian' : 'English'}`}
+      title="Content language — also changes synopses"
+      className={`flex items-center gap-1.5 bg-surface-elevated border border-zinc-800 rounded-full text-text-muted hover:border-accent hover:text-text-primary transition-colors active:scale-95 ${
+        compact ? 'px-2.5 py-2 text-xs' : 'px-3 py-2 text-xs'
+      }`}
+    >
+      <span aria-hidden="true" className="font-bold text-[10px] tracking-wide">{locale === 'id-ID' ? 'ID' : 'EN'}</span>
+    </button>
+  )
+}
+
 function MenuIcon({ open }: { open: boolean }) {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -287,6 +356,8 @@ export default function Navbar() {
   const [showTrending, setShowTrending] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const { locale } = useLocale()
+  const { items: recentSearches, add: addRecentSearch, remove: removeRecentSearch, clear: clearRecentSearches } = useSearchHistory()
 
   // Check if a nav link is active
   const isActive = (path: string) => location.pathname === path
@@ -332,7 +403,7 @@ export default function Navbar() {
     }
     try {
       const data = await fetchWithRateLimit<SearchResponse>(
-        `/search/multi?query=${encodeURIComponent(query)}&language=en-US&include_adult=false&page=1`
+        `/search/multi?query=${encodeURIComponent(query)}&language=${locale}&include_adult=false&page=1`
       )
       // Movie and TV ids live in separate TMDB namespaces, so `${type}-${id}` is the
       // only collision-safe key. Dedupe on it: the dropdown keyed rows by bare id before,
@@ -361,7 +432,7 @@ export default function Navbar() {
       setSearchResults([])
       setActiveIndex(-1)
     }
-  }, [])
+  }, [locale])
 
   // Arrow keys walk the dropdown while focus stays in the input; Enter opens
   // the highlighted row. Returns whether the panel consumed the key.
@@ -396,7 +467,18 @@ export default function Navbar() {
     searchTimerRef.current = setTimeout(() => handleSearch(val), 400)
   }
 
+  // Focus moving INTO the dropdown (trending chips, result rows, "see all")
+  // must not dismiss it — otherwise keyboard users could never reach those
+  // controls, and pointer clicks depended on the 200ms race below.
+  const closeSearchPanels = useCallback((e: FocusEvent<HTMLInputElement>) => {
+    const next = e.relatedTarget as Element | null
+    if (next?.closest?.('[data-search-panel]')) return
+    setTimeout(() => { setShowSearchResults(false); setShowTrending(false) }, 200)
+  }, [])
+
   const goToDetail = (id: number, mediaType: 'movie' | 'tv') => {
+    // A picked result means the query worked — that is a "committed" search.
+    if (searchInput.trim().length >= 2) addRecentSearch(searchInput)
     setSearchInput('')
     setShowSearchResults(false)
     setActiveIndex(-1)
@@ -406,6 +488,7 @@ export default function Navbar() {
   const goToSearchPage = (query?: string) => {
     const q = (query ?? searchInput).trim()
     if (!q) return
+    addRecentSearch(q)
     setShowSearchResults(false)
     setShowTrending(false)
     setActiveIndex(-1)
@@ -468,26 +551,42 @@ export default function Navbar() {
                   if (!searchInput) setShowTrending(true)
                   else if (searchResults.length > 0) setShowSearchResults(true)
                 }}
-                onBlur={() => setTimeout(() => { setShowSearchResults(false); setShowTrending(false) }, 200)}
+                onBlur={closeSearchPanels}
+                expanded={showTrending || showSearchResults}
+                listboxId="search-panel-desktop"
               />
               <SearchPanel
+                id="search-panel-desktop"
                 showTrending={showTrending}
                 showSearchResults={showSearchResults}
                 searchResults={searchResults}
                 activeIndex={activeIndex}
                 searchInput={searchInput}
+                recentSearches={recentSearches}
                 onPickTerm={(term) => { setSearchInput(term); handleSearch(term); setShowTrending(false) }}
                 onPickResult={goToDetail}
                 onSeeAll={() => goToSearchPage()}
+                onRemoveRecent={removeRecentSearch}
+                onClearRecent={clearRecentSearches}
               />
             </div>
 
             <div className="hidden md:block">
+              <LocaleToggle />
+            </div>
+            <div className="hidden md:block">
               <RegionSelect />
             </div>
 
-            {/* Mobile hamburger + region */}
-            <RegionSelect compact />
+            {/* Mobile hamburger + locale + region. The compact pickers must be
+                hidden at md+ — without this wrapper they rendered next to the
+                full pickers above, so every route showed doubles. */}
+            <div className="md:hidden">
+              <LocaleToggle compact />
+            </div>
+            <div className="md:hidden">
+              <RegionSelect compact />
+            </div>
             <button
               className="md:hidden text-text-primary p-2 active:scale-90 transition-transform"
               onClick={() => setMenuOpen(!menuOpen)}
@@ -512,17 +611,23 @@ export default function Navbar() {
               if (!searchInput) setShowTrending(true)
               else if (searchResults.length > 0) setShowSearchResults(true)
             }}
-            onBlur={() => setTimeout(() => { setShowSearchResults(false); setShowTrending(false) }, 200)}
+            onBlur={closeSearchPanels}
+            expanded={showTrending || showSearchResults}
+            listboxId="search-panel-mobile"
           />
           <SearchPanel
+            id="search-panel-mobile"
             showTrending={showTrending}
             showSearchResults={showSearchResults}
             searchResults={searchResults}
             activeIndex={activeIndex}
             searchInput={searchInput}
+            recentSearches={recentSearches}
             onPickTerm={(term) => { setSearchInput(term); handleSearch(term); setShowTrending(false) }}
             onPickResult={goToDetail}
             onSeeAll={() => goToSearchPage()}
+            onRemoveRecent={removeRecentSearch}
+            onClearRecent={clearRecentSearches}
           />
         </div>
 

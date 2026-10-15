@@ -1,283 +1,93 @@
 # Tasks
 
-## Home filter reset (2026-10-15)
+## Deepscan + fix UI/feature/image bugs (2026-10-15)
 
-Request: "reset filter ketika di home". Today the only reset lives inside the
-empty-results block, so a user with active filters that still return results has
-no way to clear them from the home view.
+Request: "deepscan dan perbaiki bug ui dan fitur yang ada termasuk gambar yang error lalu
+berikan saya saran apa saja yang bisa kita kembangkan lagi".
 
-Plan:
-- [x] 1. `src/App.tsx` — one `resetFilters` writer (cat/genres/provider/type/page
-      back to defaults); "Reset" button in the grid header whenever a filter is
-      active, so it works without opening the panel; empty-state "Reset All
-      Filters" reuses the same writer; header row wraps instead of overflowing
-- [x] 2. Verify: tsc + build; Playwright at `?cat=top_rated&genres=28&type=anime`
-      → Reset visible → click → query string cleared, button gone, 0 console errors
-
-### Proof (2026-10-15)
-- [CLAIM] reset clears the URL — [PROOF]: hermetic Chromium E2E, start
-  `?cat=top_rated&genres=28&type=anime&page=2` → click → end query `""`
-- [CLAIM] reset only when there is something to reset — [PROOF]: pristine `/`
-  → Reset absent; filtered home → Reset present
-- [CLAIM] error escape hatch — [PROOF]: injected 500s on `/discover` → error
-  screen shows "Reset Filters" → click → query `""` (was `?genres=28&provider=8&type=anime`)
-- [CLAIM] typecheck + build — [PROOF]: `tsc --noEmit` exit 0; `vite build`
-  513 modules, 15.22s
-- Note: fixed a pre-existing badge bug on the way — default `contentType` was
-  `'movie'`, and the count tested `!== 'all'`, so a pristine home showed "1 filter".
-
-## Paket 1+2 + watchlist + region + PWA + CI (2026-10-15)
-
-Request: "1 dan 2, untuk fitur tambahan itu buatkan watchlist jadi user bisa simpan film apa
-yang mau dia nonton nanti dan no 11,12,13".
-Approved: Paket 1 (#1 home URL state, #2 deep-link `_redirects`, #3 hero image sizing),
-Paket 2 (#4 TMDB attribution, #5 per-route title + OG meta, #6 credit poster size,
-#7 search dropdown a11y, #8 dead dep), #9 watchlist, #11 region selector, #12 PWA offline,
-#13 CI drag test. NOT approved: #10 recent searches.
+Method: 6 read lenses over the whole app (images/media, UI/layout, data/state, resilience,
+a11y/SEO/PWA, cross-surface consistency). Every finding below was read in the source before it
+was written down; anything that could not be proven from the code was dropped.
 
 Plan:
-- [x] 1. `src/App.tsx` — home state (page, category, genre, platform, type) ↔ URL search params;
-       back from detail restores the same view + scroll
-- [x] 2. `public/_redirects` — SPA fallback `/* /index.html 200` for deep-link refresh
-- [x] 3. `src/App.tsx` hero + `src/pages/MovieDetailPage.tsx` hero — `original` → `w1280`/`w1920`,
-       `fetchpriority="high"` `decoding="async"`
-- [x] 4. `src/components/Footer.tsx` (new) + wire into `src/main.tsx` — TMDB attribution
-- [x] 5. `src/utils/useDocumentTitle.ts` (new) + per-route titles; OG/twitter meta in `index.html`
-- [x] 6. `src/pages/PersonDetailPage.tsx` — credit posters `w92` → `w342`
-- [x] 7. `src/components/Navbar.tsx` — search dropdown `role="listbox"` + arrow keys + `aria-live`
-- [x] 8. `package.json` — drop unused `vite-plugin-static-copy`
-- [x] 9. `src/utils/watchlist.ts` (new) + save button on cards/detail + `/watchlist` page
-- [x] 10. `src/utils/region.ts` (new) + region dropdown in Navbar; thread through App,
-        CategoryPage, `discover.ts`, `providers.ts` cache, MovieDetailPage
-- [x] 11. `public/sw.js` (new) + register in `src/main.tsx` — offline shell + poster cache
-- [x] 12. `scripts/dragtest/cdp.mjs` Linux chrome paths + `.github/workflows/ci.yml` `test:drag`
-- [x] 13. Verify: tsc, build, drag test, browser run
+- [x] 1. `src/components/Navbar.tsx` — `md:hidden` wrapper on the compact RegionSelect (two
+      pickers rendered side by side at >=768px); search panel: `aria-expanded` reflects state,
+      `aria-controls`, chips + "See all" get `onClick` (keyboard), blur into the panel no
+      longer closes it; result thumbnails go through ImageWithFallback
+- [x] 2. `src/components/ImageWithFallback.tsx` — reset error/loaded when `src` changes; adopt
+      an already-complete image on mount (`img.complete`), otherwise a cached poster never
+      fires `onLoad` and stays `opacity-0` behind its own skeleton
+- [x] 3. `src/utils/tmdb.ts` — `dedupById` keys on `media_type + id`; the bare id merged the
+      movie and tv namespaces and silently dropped titles from every combined page
+- [x] 4. `src/utils/api.ts` — per-caller abort wrapper so a shared in-flight promise cannot be
+      rejected by another caller's AbortSignal
+- [x] 5. `src/utils/providers.ts` — drop the failed catalog from the cache instead of
+      remembering `[]` forever; surface failure instead of a permanent "Loading platforms…"
+- [x] 6. `src/App.tsx` — page title, Navbar+Footer on the error screen, hero backdrop
+      `onError`, row skeleton only while loading, platform error/retry, `!`-prefix cleanup,
+      TV badge in the grid, grid + rail keys namespaced by media_type (collision after the
+      dedupe fix), grid WatchButton now `compact` (was overlapping the card title),
+      provider logos degrade
+- [x] 7. `src/pages/CategoryPage.tsx` — sort only where the category needs it (Top Rated was
+      being re-sorted newest-first), badge counts a real deviation, page/filters in the URL so
+      Back from a detail page restores the view, error screen keeps its chrome, provider
+      logos degrade
+- [x] 8. `src/pages/MovieDetailPage.tsx` — scroll reset per title, region block stops
+      mislabelling another country's providers, every logo/poster/backdrop degrades instead
+      of breaking (poster via ImageWithFallback, all four bare `<img>` get `onError`)
+- [x] 9. `src/pages/SearchPage.tsx` — trending typo, badge class conflict, `w342` posters
+- [x] 10. `src/pages/PersonDetailPage.tsx` — date-only parse without the UTC day shift,
+      `w185` credit posters, profile via ImageWithFallback
+- [x] 11. `src/index.css` — `--color-text-muted` to an AA-passing value
+- [x] 12. `public/sw.js` — trim the shell cache as well as the image cache; `CompanyDetailPage`
+      poster + logo degrade through the same component
+- [ ] 13. Verify: `tsc --noEmit`, `vite build`, headless run of every route, 0 console errors
+      — BLOCKED: the safety classifier for shell tools (`oc/mimo-v2.6-flash-free`) was down
+      for the whole session, so no command could run. Static verification done instead:
+      every edited file re-read end to end, import contracts cross-checked against exports,
+      Tailwind `!`-prefix claim settled by grepping the shipped `tailwindcss/dist/lib.mjs`
+      (`startsWith("!")` = 0 hits, `endsWith("!")` = 2 hits).
+- [x] 14. Write the development suggestions (delivered in the session report; the ranked
+      shortlist lives in the chat, not in the repo)
 
-### Proof (2026-10-15)
-- [CLAIM] typecheck clean — [PROOF]: `tsc --noEmit` exit 0, no diagnostics
-- [CLAIM] production build — [PROOF]: `vite build` 513 modules → dist/, 11.05s
-- [CLAIM] drag test 9/9 — [PROOF]: `node scripts/dragtest/run.mjs` pass:true,
-  dragMovedPx 180, keyboardPagedPx 299, consoleErrorCount 0
-- [CLAIM] lockfile valid — [PROOF]: `JSON.parse(package-lock.json)` → LOCK_JSON_OK
-- [CLAIM] public assets shipped — [PROOF]: dist/ contains `_redirects`, `sw.js`,
-  `site.webmanifest`, `favicon.svg`
-- [CLAIM] CI wired — [PROOF]: `.github/workflows/ci.yml` step `run: npm run test:drag`;
-  `scripts/dragtest/cdp.mjs` has `/usr/bin/google-chrome` + 3 Linux fallbacks
+## Feature pass 2 — suggestions 1/2/3/4/5/8/10/11 + filter-scroll bug (2026-10-15)
 
-## Mobile UX pass: drag-scroll rails + mobile hardening (2026-10-15)
+Request: implement the picked suggestions (watch deep-links, search history, more
+filters, srcset posters, recommendations rail, ID locale toggle, trailer hover,
+offline watchlist) and fix: opening the filter panel must not scroll the page to top.
 
-Request: "deepscan + bikin user friendly untuk mobile, scroll ke kanan bisa digeser dengan drag".
-Approved scope: A (drag rails) + B (mobile polish) + C (real bugs) + D (dead-code cleanup + README).
-
-Root cause of "gak bisa digeser": the row-aligned arrow buttons are `opacity-0` with no
-`pointer-events-none`, so on touch they are invisible but still capture every tap at both edges;
-no mouse drag, no snap, no edge affordance, no overscroll containment.
-
-Plan:
-- [x] 1. `src/components/ScrollRow.tsx` (new) — one drag-scroll rail: native touch pan untouched,
-       pointer drag for mouse/pen, drag-guard on click, persistent md+ arrows, edge fade,
-       snap on coarse pointers only, keyboard arrows, `overscroll-behavior-x: contain`
-- [x] 2. `src/index.css` — `.scroll-row` styles, `.safe-top`/`.safe-bottom`, reduced-motion block
-- [x] 3. `src/App.tsx` — `HorizontalSection` -> `ScrollRow`; row queries get a real error/empty
-       state instead of an endless skeleton
-- [x] 4. `src/pages/MovieDetailPage.tsx` — cast + similar -> `ScrollRow`; watch/providers actually
-       requested; trailer behind a click-to-play facade
-- [x] 5. `src/pages/CategoryPage.tsx`, `src/pages/SearchPage.tsx` — 44px pills; SearchPage "TV"
-       excludes anime so it matches App/CategoryPage
-- [x] 6. `src/pages/PersonDetailPage.tsx` — `also_known_as` guard; filmography reveals in pages
-- [x] 7. `src/pages/CompanyDetailPage.tsx` — media_type-aware React key
-- [x] 8. `src/components/Navbar.tsx` — sticky wrapper keeps mobile search bar under the nav;
-       desktop/mobile dropdown markup deduped
-- [x] 9. `src/utils/api.ts` — settle the dedupe map without an unhandled rejection
-- [x] 10. `src/main.tsx` — `MotionConfig reducedMotion="user"`
-- [x] 11. `index.html` / `public/site.webmanifest` — viewport-fit, manifest + icon links,
-       theme-color unified with `--color-surface`
-- [x] 12. `git rm` `src/Modal.tsx`, `functions/`, `public/index.php`, `public/.htaccess`
-- [x] 13. `README.md` — rewrite for the actual stack (React 18 + Vite + Cloudflare Pages)
-- [x] 14. Verify: tsc, build, Playwright 390x844 drag test, 0 console errors
-
-### Proof (2026-10-15)
-- `tsc --noEmit` → exit 0 (run via `.scratch/verify.config.js` tunnel: `[verify] tsc -> exit=0`)
-- `vite build` → 507 modules, built in 4.47s, exit 0
-- Headless-Chromium drag test, 390x844, real CDP mouse input, **9/9 checks**:
-  `dragMovedPx 180` (0→180), `dragSwallowedClick true`, `tapStillClicks true`,
-  `keyboardPagedPx 299`, `fitsNoOverflow true`, `fitsArrowsDisabled true`,
-  `cancelClearedDragState true`, `isDraggingClassCleared true`, `consoleErrors []`
-- Runnable: `npm run test:drag` (headless, no framework — `scripts/dragtest/`)
-
-### Not in this pass (needs a separate call)
-- Laravel shell still tracked: `app/`, `resources/`, `storage/`, `.github/workflows/ci.yml`
-  (its PHP job runs `composer install` with no `composer.json` -> always red), plus a 0-byte
-  `public/favicon.ico`.
-
-## Platform filter on CategoryPage (2026-10-12)
-
-Request: "tambahkan filter platform seperti netflix, prime" on the category page.
-
-Problem: home already has a real Platform filter (region catalog + server-side /discover). The
-CategoryPage still builds its Platform pills from providers found on the currently-loaded 20 items,
-so Netflix/Prime are often absent, and picking one client-filters down to an empty grid.
-
-Approach (reuse-first): lift the home platform machinery into one shared module, call it from both.
-
-Plan:
-- [x] 1. `src/utils/discover.ts` (new) — shared `fetchDiscoverPage(sort, region, provider, page)`
-       + `CATEGORY_SORT`; home + category both call it (no duplicate logic)
-- [x] 2. `src/App.tsx` — replace its local `fetchDiscoverPage` / `CATEGORY_SORT` with the shared module
-- [x] 3. `src/pages/CategoryPage.tsx` — Platform section from `getRegionProviders('ID')` catalog
-       (Netflix / Prime first + "All"), single-select `activePlatform`; when set, fetch
-       `/discover/movie|tv` via the shared module instead of client-filtering the loaded page
-- [x] 4. Verify: tsc, build, browser (Netflix -> distinct titles; "All" resets; existing
-       provider pills removed; pagination still moves)
-
-### Proof (2026-10-12)
-- `npx tsc --noEmit` → exit 0 ; `npm run build` → 505 modules, built in 5.12s, exit 0
-- `[CLAIM] category platform catalog — [PROOF] /category/popular: 49 pills, first = All / Netflix /
-  Amazon Prime Video / HBO Max / Vidio (pre-fix: ~6 pills derived from the loaded 20 titles,
-  Netflix/Prime usually absent)`
-- `[CLAIM] category Netflix filter is server-side — [PROOF]`:
-  `https://api.themoviedb.org/3/discover/movie?language=en-US&page=1&watch_region=ID&with_watch_providers=8&with_watch_monetization_types=flatrate&sort_by=popularity.desc`
-  grid: The Mongoose/Animals/Other Mommy → Animals/Reporting Live/Doing Life/UNABOMBER (1223ms)
-- `[CLAIM] category "All" resets — [PROOF] back to The Mongoose/Animals/Other Mommy in 401ms`
-- `[CLAIM] home unregressed — [PROOF] hero "Animals", 19 cards, 49 pills, Netflix/Prime first`
-- `[CLAIM] 0 console errors — [PROOF] /category/popular + / → 0 error messages`
-
-## Deep-scan bug sweep (2026-10-12)
-
-Bugs found by reading every source file + live API/curl probes:
-
-1. `src/components/Navbar.tsx` — search dropdown maps TV results with `title`/`release_date` only.
-   TMDB `/search/multi` sends `name`/`first_air_date` for TV, so TV rows show a blank title and
-   no year. Also duplicates rows across media types and shows `results.length` in the
-   "See all results" count instead of the true total.
-2. `src/App.tsx` — now_playing grid client-sort uses `new Date(str).getTime()`; an ISO date-only
-   string parses as UTC midnight, shifting the displayed order by timezone. Replace with lexical
-   compare (ISO strings sort chronologically).
-3. `src/App.tsx` — ambient glow uses `radial-gradient(..., url(...) 0%, ...)`; `url()` is invalid
-   as a gradient color stop, so that layer never paints.
-4. `src/App.tsx` — platform-filtered `/discover/tv` is sent `sort_by=primary_release_date.desc`
-   (a movie-only sort). TMDB silently ignores it and the TV half of the grid returns in default
-   order. Needs per-kind sort.
-5. `src/utils/api.ts` — `throttledFetch` retries a 429 but does not special-case 4xx; a 404/401
-   propagates fine, but a caller-supplied `AbortSignal` abort is retried by react-query. Also
-   request dedupe was missing.
-6. `src/pages/CategoryPage.tsx` — anime TV shows (Animation genre + `ja`, e.g. One Piece) appear
-   under BOTH "TV Series" and "Anime". TV Series should exclude anime.
-7. `src/pages/CompanyDetailPage.tsx` — `/discover/movie|tv?with_companies=` returns only page 1;
-   large studios (Warner Bros., Marvel) silently show ~20 of hundreds of titles.
-8. `public/_headers` — production CSP `style-src 'self' 'unsafe-inline'` omits
-   `https://fonts.googleapis.com`, which `index.html` loads its stylesheet from. Production blocks
-   the font CSS (dev CSP already allows it).
-
-Found but NOT fixed in this pass (needs call):
-9. `functions/` — `functions/api.ts` imports `elysia` (not in package.json; not installed) and
-   nothing calls `/api`; the whole dir is dead. Cloudflare Pages auto-detects `functions/` and may
-   fail its Functions build on the missing dep. Recommend delete.
-
-Plan:
-- [x] 1. Navbar — normalize search/multi (name→title, first_air_date→release_date), dedupe by
-       media_type+id, use `total_results` for the count
-- [x] 2. App — lexical ISO date sort for the now_playing grid
-- [x] 3. App — fix ambient glow to a valid backdrop backdrop layer
-- [x] 4. App + CategoryPage — per-kind discover sort; TV excludes anime (without_genres=16)
-- [x] 5. api.ts — request dedupe, http-error classification, no retry on abort
-- [x] 6. CompanyDetail — paginate company credits (fixes truncated studios)
-- [x] 7. public/_headers — add fonts.googleapis.com to style-src
-- [x] 8. Untrack build.log / build-output.txt / saranin-page.png, add to .gitignore
-- [x] 9. Verify: tsc, build, browser
-
-### Proof (2026-10-12)
-- `npx tsc --noEmit` → exit 0
-- `npm run build` → 505 modules, built in 5.80s, exit 0
-- Ambient layer — `[PROOF]` home: `div.fixed img[alt=""]` present, computed `filter` contains `blur`
-  (was: `radial-gradient(..., url(...))` which painted nothing)
-- Genre/Type grid changed — `[PROOF]` CategoryPage trending after fix:
-  `TV Series → 14`, `Anime → 6`, `All → 40`. 14 + 6 = 20 = the full TV set, so anime is no longer
-  double-counted (pre-fix TV Series read the full 20 including the 6 anime).
-- CompanyDetail — `[PROOF]` `/company/420` (Marvel Studios): `138 titles`, 138 cards rendered
-  (pre-fix: single page = ~20 per kind).
-- Navbar dropdown — `[PROOF]` `/search/multi?query=one piece`: 8 rows, every row has a non-empty
-  title; TV rows show `One Piece 📺 TV 1999` / `ONE PIECE 📺 TV 2023` (name→title works).
-- 0 console errors on home / category / company / search.
-
-### Not fixed (needs call)
-- `functions/` imports `elysia` (not in package.json, not installed) and nothing calls `/api`.
-  Dead + a Cloudflare Pages build risk. Recommend: `git rm -r functions`.
-
-## Home pagination fix + search page (2026-10-12)
-
-Root causes found in deep scan:
-1. Home grid reads only `nowPlaying` query (2 pages = 40 items) while infinite scroll appends to
-   a `movies` array the grid never renders -> `totalPages === 2`, Next disabled on page 2 ("nyangkut").
-2. Feature item is pulled out of `filteredMovies` on every page but the hero only renders on page 1 ->
-   pages 2+ silently lose one item.
-3. 12 stale tsc-emitted `.js` files live next to the `.tsx` sources. Vite resolve order prefers `.js`,
-   so dev/prod can serve compiled output instead of the edited `.tsx`.
-4. Provider filter only worked because the app held every fetched item in memory (bulk provider fetch).
-
-Plan:
-- [x] 1. Delete stale compiled `.js` duplicates in `src/` (`git rm`)
-- [x] 2. `tsconfig.json` -> `noEmit: true` (tsc emits next to source otherwise)
-- [x] 3. `src/utils/tmdb.ts` — shared `normalizeMovie` / `normalizeTv` (was duplicated in App + CategoryPage)
-- [x] 4. `src/App.tsx` — grid fetches ONE TMDB page per view (movies + TV for active category);
-       Prev / Next only, page numbers removed; infinite scroll deleted; dead `nowPlaying` / `tvOnAir`
-       queries and bulk provider fetch removed; per-page progressive provider fetch with cache
-- [x] 5. `src/pages/CategoryPage.tsx` — use shared normalizers
-- [x] 6. `src/pages/SearchPage.tsx` — new `/search?q=` page (multi search, type filter, Prev / Next)
-- [x] 7. `src/main.tsx` — register `/search` route
-- [x] 8. `src/components/Navbar.tsx` — Enter key + "See all results" go to `/search?q=`
-- [x] 9. Verify: `npx tsc --noEmit`, `npm run build`, browser run (Next -> page 2 content, search flow)
-
-## Home platform filter (Netflix / Prime / …) — 2026-10-12
-
-Problem: the home Platform pills were built from `availableProviders` = providers found on the
-currently loaded 20 items only. Picking one filtered client-side and emptied the grid (Apple TV -> 0).
-
-Fix: real server-side platform filtering + a fixed "All" default.
-- [x] 1. `src/App.tsx` — platform list from TMDB `/watch/providers/movie?watch_region=ID` (cached),
-       curated priority (Netflix, Prime Video, Disney+, Apple TV+, Max, …) + "All" first
-- [x] 2. `src/App.tsx` — when a platform is picked, fetch `/discover/movie|tv` with
-       `with_watch_providers` + `watch_region` + `sort_by` (category-derived), paginated
-- [x] 3. `src/App.tsx` — single-select `activePlatform`; drop per-title provider hydration
-       (no longer needed on home); client-side filter keeps genre + type
-- [x] 4. Verify: tsc, build, browser (All default, Netflix -> distinct titles, paginate, back to All)
-
-## Proof (2026-10-12)
-- tsc --noEmit: exit 0
-- npm run build: 505 modules, built in 4.64s, exit 0
-- Browser: Platform bar renders 40 providers, "All" active by default; Netflix -> discover
-  `with_watch_providers=8`, grid swaps to Netflix catalog; Platform "All" -> grid resets to
-  unfiltered Now Playing in 308ms; 0 console errors.
-
-## Cleanup pass: buang sisa + data testing (2026-10-15)
-
-Request: "hapus sisa yang tak terpakai dan data testing serta data example yang tidak digunakan".
-Tiap penghapusan diverifikasi dulu (grep/glob) tidak ada referensi dari `src/`.
-
-- [x] `app/`, `resources/`, `storage/` — shell Laravel; tidak di-import `src/` (mati sejak migrasi Vite/CF)
-- [x] `.inverse/` — konfigurasi pipeline agent; tool tidak terpasang (tanpa CLI/extension/`~/.inverse`)
-- [x] `public/favicon.ico` (0 byte, tak dirujuk — index.html pakai `favicon.svg`), `public/img/no-poster.svg`
-      (hanya dipakai blade yang dihapus)
-- [x] Orphan worktree `.claude/worktrees/agent-a3f07c715b162237f/` + `git worktree prune` +
-      branch `worktree-agent-…` (dihapus hanya bila sudah merged ke main)
-- [x] Data testing: `.playwright-mcp/`, `saranin-page.png`, `build.log`, `build-output.txt`, `.scratch/`
-- [x] `.github/workflows/ci.yml` — job PHP dihapus (selalu merah: `composer install` tanpa
-      `composer.json`); job Node `npm ci && npm run build` tetap
-- [x] `.editorconfig` / `.gitattributes` / `.gitignore` — aturan Laravel dibuang, duplikat dibersihkan
-- [x] `README.md` — URL clone benar (Saranin, bukan Movieflix), cara bikin `.env` (`.env.example`
-      tidak ada), dokumentasi `npm run test:drag`
-- [x] `git remote remove composer` — sisa laravel/laravel (re-add: `git remote add composer
-      https://github.com/laravel/laravel.git`)
-- [x] Verify: purge jalan → `tsc --noEmit` exit 0 + `vite build` hijau (bukti 0 referensi file terhapus)
-
-### Proof (2026-10-15)
-- Purge: `app/`, `resources/`, `storage/`, `.inverse/` (80 file staged `D`), `public/favicon.ico`,
-  `public/img/no-poster.svg` (dir ikut hilang), `build.log`, `build-output.txt`,
-  `saranin-page.png`, `.playwright-mcp/` — semua `gone` di existence check
-- Worktree: prune membersihkan registrasi + `git branch -d worktree-agent-a3f07c715b162237f`
-  (merged, tip `46845051`); `git worktree list` → cuma main; `git remote remove composer` →
-  tinggal `origin`
-- `[CLAIM] 0 referensi file terhapus — [PROOF] grep src/: `laravel|blade|artisan|composer|no-poster|favicon\.ico|inverse` → 0 hit`
-- `[CLAIM] tsc --noEmit — [PROOF]: [typecheck] tsc exit=0`
-- `[CLAIM] build hijau — [PROOF]: ✓ 507 modules transformed, built in 4.45s, exit 0`
-- `[CLAIM] worktree bersih — [PROOF]: git worktree list → C:/laragon/www/Saranin [main]`
+Plan (1 line per step + files touched):
+- [x] 0. `src/App.tsx` + `src/pages/CategoryPage.tsx` — scroll fix: filter interactions
+      never move the viewport (opening the panel, every pill inside it, and the
+      PUSH→REPLACE flip of the first filter write — the old searchParams-keyed effect
+      smooth-scrolled to top on any URL write); Back/Forward restores via the saved
+      position, paging scrolls itself (home → top of grid, category → top)
+- [x] 1. `src/pages/MovieDetailPage.tsx` — watch deep-links: per-region `link` (JustWatch)
+      makes provider pills + country rows real anchors
+- [x] 2. `src/utils/searchHistory.ts` (new) + `src/components/Navbar.tsx` +
+      `src/pages/SearchPage.tsx` — recent searches store (watchlist pattern), recorded on
+      commit, rendered above trending, removable + clearable
+- [x] 3. `src/utils/discover.ts` + `src/App.tsx` + `src/pages/CategoryPage.tsx` — year /
+      rating floor / runtime URL params, server-side via /discover when set, counted in the
+      badge, cleared by reset
+- [x] 4. `src/components/ImageWithFallback.tsx` + poster call sites — TMDB srcset ladder
+      (w92→w780) with per-surface `sizes`; srcset is emitted only when `sizes` is passed
+      (without one the browser assumes 100vw and over-fetches), all call sites now pass it
+- [x] 5. `src/pages/MovieDetailPage.tsx` + `src/App.tsx` — "More Like This" rail from
+      recommendations + home "Because you saved X" rail seeded by the newest watchlist entry
+- [x] 8. `src/utils/locale.ts` (new) + Navbar toggle + `language` threaded through App /
+      CategoryPage / SearchPage / MovieDetailPage / PersonDetailPage / CompanyDetailPage /
+      discover / providers (provider catalog cache keyed region+locale)
+- [x] 10. `src/utils/trailer.ts` + `src/components/TrailerHover.tsx` (new) + home hero,
+      home grid + rail cards, detail hero, similar/recommendation cards, category grid,
+      company grid — muted looping hover preview, desktop pointers only, reduced-motion
+      respected, one cached key fetch per title
+- [x] 11. `public/site.webmanifest` + `src/main.tsx` — watchlist + search shortcuts; the lazy
+      watchlist chunk is warmed once the SW controls the page so the offline route boots
+- [ ] 12. Verify: `tsc --noEmit`, `vite build`, dragtest harness, 0 console errors
+      — BLOCKED: the safety classifier (`oc/mimo-v2.6-flash-free`) is still down, every
+      Bash call is refused before it runs. Static verification done instead: every edited
+      file re-read end to end, query-key dimensions cross-checked (locale + year/rating/
+      runtime present in every key that consumes them), ImageWithFallback `sizes` gating
+      verified against every call site via grep (0 call sites without `sizes`).
+      Retry the three commands when the classifier recovers.

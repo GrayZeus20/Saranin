@@ -64,11 +64,18 @@ export class HttpError extends Error {
 // one network call (e.g. a row and the grid both pulling page 1 of /movie/popular).
 // Only successful bodies are cached; rejected promises are removed so a retry is
 // a real retry, not a cached failure.
+//
+// The shared network work deliberately runs WITHOUT any caller's AbortSignal.
+// Before, the first caller's signal was baked into the shared promise, so an
+// unmount in component A rejected component B's request — the survivor showed a
+// spurious error while its own data arrived fine. Each caller now observes its
+// own signal through withCallerAbort, independent of who started the request.
 const inflight = new Map<string, Promise<unknown>>()
 
-function doFetch(url: string, options?: RequestInit): Promise<Response> {
+function doFetch(url: string, options?: RequestInit, signal?: AbortSignal): Promise<Response> {
   return fetch(url, {
     ...options,
+    signal,
     headers: {
       Authorization: `Bearer ${TMDB_TOKEN}`,
       ...options?.headers,
@@ -80,60 +87,75 @@ function delay(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms))
 }
 
+/** The shared result raced against one caller's own signal. */
+function withCallerAbort<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return work
+  if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'))
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException('Aborted', 'AbortError'))
+    signal.addEventListener('abort', onAbort, { once: true })
+    work.then(
+      (value) => { signal.removeEventListener('abort', onAbort); resolve(value) },
+      (err) => { signal.removeEventListener('abort', onAbort); reject(err) },
+    )
+  })
+}
+
+async function runRequest<T>(url: string, options?: RequestInit, signal?: AbortSignal): Promise<T> {
+  await acquireSlot()
+  try {
+    await paceStart(signal)
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+
+    const res = await doFetch(url, options, signal)
+
+    // 429 → honour Retry-After, then retry once.
+    if (res.status === 429) {
+      const retryAfter = parseInt(res.headers.get('Retry-After') || '2', 10) * 1000
+      const jitter = Math.random() * 500
+      await delay(retryAfter + jitter)
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      const retryRes = await doFetch(url, options, signal)
+      if (!retryRes.ok) throw new HttpError(retryRes.status, `HTTP ${retryRes.status}: ${retryRes.statusText}`)
+      return (await retryRes.json()) as T
+    }
+
+    // 5xx is transient; 4xx is a client error that will not heal on retry.
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      const detail = body ? ` — ${body.slice(0, 200)}` : ''
+      throw new HttpError(res.status, `HTTP ${res.status}: ${res.statusText}${detail}`)
+    }
+
+    return (await res.json()) as T
+  } finally {
+    releaseSlot()
+  }
+}
+
 async function throttledFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const signal = options?.signal ?? undefined
+  const callerSignal = options?.signal ?? undefined
   // A caller that already aborted must never hit the network.
-  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+  if (callerSignal?.aborted) throw new DOMException('Aborted', 'AbortError')
 
   const method = (options?.method ?? 'GET').toUpperCase()
   const dedupeKey = method === 'GET' ? url : null
-  if (dedupeKey) {
-    const existing = inflight.get(dedupeKey)
-    if (existing) return existing as Promise<T>
-  }
 
-  const run = (async (): Promise<T> => {
-    await acquireSlot()
-    try {
-      await paceStart(signal)
-      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+  // Non-shared requests keep the caller's signal end-to-end — real cancellation.
+  if (!dedupeKey) return runRequest<T>(url, options, callerSignal)
 
-      const res = await doFetch(url, options)
-
-      // 429 → honour Retry-After, then retry once.
-      if (res.status === 429) {
-        const retryAfter = parseInt(res.headers.get('Retry-After') || '2', 10) * 1000
-        const jitter = Math.random() * 500
-        await delay(retryAfter + jitter)
-        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-        const retryRes = await doFetch(url, options)
-        if (!retryRes.ok) throw new HttpError(retryRes.status, `HTTP ${retryRes.status}: ${retryRes.statusText}`)
-        return (await retryRes.json()) as T
-      }
-
-      // 5xx is transient; 4xx is a client error that will not heal on retry.
-      if (!res.ok) {
-        const body = await res.text().catch(() => '')
-        const detail = body ? ` — ${body.slice(0, 200)}` : ''
-        throw new HttpError(res.status, `HTTP ${res.status}: ${res.statusText}${detail}`)
-      }
-
-      return (await res.json()) as T
-    } finally {
-      releaseSlot()
-    }
-  })()
-
-  if (dedupeKey) {
-    inflight.set(dedupeKey, run)
-    // `run.finally(...)` returns a *new* promise that rejects whenever `run`
-    // rejects — with no handler on it that surfaced as an unhandled rejection
-    // on every failed request. Handling both outcomes on the same promise
-    // clears the entry without spawning a second, unobserved one.
+  let shared = inflight.get(dedupeKey) as Promise<T> | undefined
+  if (!shared) {
+    // Shared work runs unsignaled; abort is applied per caller below.
+    shared = runRequest<T>(url, options, undefined)
+    inflight.set(dedupeKey, shared)
+    // `run.finally(...)` spawns a second, unobserved promise that surfaced as an
+    // unhandled rejection on every failed request. Handling both outcomes on the
+    // same promise clears the entry without that side effect.
     const cleanup = () => { inflight.delete(dedupeKey) }
-    run.then(cleanup, cleanup)
+    shared.then(cleanup, cleanup)
   }
-  return run
+  return withCallerAbort(shared, callerSignal)
 }
 
 export async function fetchWithRateLimit<T>(
