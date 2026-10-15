@@ -173,6 +173,40 @@ body {
   pointer-events: none;
 }
 
+/* ---------------------------------------------------------------------------
+   Availability rail — the "half moon".
+
+   The rail's own arc comes from a per-chip translateY computed in
+   RegionFlagRail (the middle of the row dips, the ends lift). These two
+   effects are what make it read as a moon rather than a bent list: a crescent
+   highlight inside each flag badge, and a soft light pooling under the arc.
+   --------------------------------------------------------------------------- */
+.moon-crescent {
+  /* A circle offset out of the badge, so only a sliver of light remains — the
+     lit limb of a crescent moon. Repeating the circular radius keeps the clip
+     honest for the flag underneath. */
+  -webkit-mask-image: radial-gradient(circle at 72% 26%, transparent 46%, #000 50%);
+  mask-image: radial-gradient(circle at 72% 26%, transparent 46%, #000 50%);
+}
+
+.moon-glow {
+  /* Light from below the arc, falling off before it reaches the copy above. */
+  background: radial-gradient(60% 100% at 50% 100%, rgba(230, 185, 30, 0.16), transparent 70%);
+  filter: blur(6px);
+  opacity: 0.9;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .moon-glow {
+    animation: moon-breathe 6s ease-in-out infinite;
+  }
+}
+
+@keyframes moon-breathe {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect, useMemo, type FocusEvent } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
-import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
+import { fetchWithRateLimit } from '../utils/api'
+import { tmdbImage } from '../utils/imageSizes'
 import { ImageWithFallback } from './ImageWithFallback'
 import { REGION_MAP } from '../utils/constants'
 import { useRegion } from '../utils/region'
@@ -45,7 +46,7 @@ const TRENDING_SEARCHES = ['One Piece', 'Demon Slayer', 'Naruto', 'Dragon Ball',
 // markup, and a fix to one silently missed the other. One renderer now serves
 // both; only the sizing classes differ.
 function SearchField({
-  variant, searchInput, onSearchInput, onEnter, onKeyNav, onFocus, onBlur, expanded, listboxId,
+  variant, searchInput, onSearchInput, onEnter, onKeyNav, onFocus, onBlur, onEscape, expanded, listboxId, autoFocus = false,
 }: {
   variant: 'desktop' | 'mobile'
   searchInput: string
@@ -54,8 +55,11 @@ function SearchField({
   onKeyNav: (key: 'ArrowDown' | 'ArrowUp' | 'Escape') => boolean
   onFocus: () => void
   onBlur: (e: FocusEvent<HTMLInputElement>) => void
+  /** Escape with no open panel — collapse the desktop field, blur on mobile. */
+  onEscape?: () => void
   expanded: boolean
   listboxId: string
+  autoFocus?: boolean
 }) {
   const isDesktop = variant === 'desktop'
   // Padding is set per variant and never layered: `pr-4` combined with `pr-3`
@@ -80,6 +84,9 @@ function SearchField({
           // it consumed the key so typing at the ends is unaffected.
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape') {
             if (onKeyNav(e.key)) e.preventDefault()
+            // Nothing to dismiss inside the field — hand the key to the host,
+            // which collapses the desktop field (and blurs on mobile).
+            else if (e.key === 'Escape') onEscape?.()
           }
         }}
         onFocus={onFocus}
@@ -89,6 +96,7 @@ function SearchField({
         aria-expanded={expanded}
         aria-controls={listboxId}
         aria-autocomplete="list"
+        autoFocus={autoFocus}
         className={`w-full bg-surface-elevated border border-zinc-800 text-text-primary pl-9 rounded-full focus:border-accent focus:outline-none transition-colors placeholder:text-zinc-600 ${sizing}`}
       />
     </>
@@ -193,8 +201,9 @@ function SearchPanel({
               >
                 <div className="relative w-8 h-12 rounded-md overflow-hidden bg-surface-card shrink-0">
                   <ImageWithFallback
-                    src={movie.poster_path ? `${IMG_BASE}/w92${movie.poster_path}` : ''}
+                    src={tmdbImage(movie.poster_path, 'poster', 'w92')}
                     alt=""
+                    kind="poster"
                     className="w-full h-full object-cover"
                     fallbackText="🎬"
                     sizes="32px"
@@ -355,7 +364,23 @@ export default function Navbar() {
   const [showSearchResults, setShowSearchResults] = useState(false)
   const [showTrending, setShowTrending] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
+  // Search is a disclosure on both breakpoints: an icon in the nav row, and the
+  // field only mounts once it is pressed. Phones used to carry a permanently
+  // visible bar under the nav, which spent a row of every screen on an idle
+  // control; the icon now reveals the same field (auto-focused, so the tap lands
+  // straight in the keyboard).
+  const [desktopSearchOpen, setDesktopSearchOpen] = useState(false)
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  const desktopSearchRef = useRef<HTMLDivElement>(null)
+  const mobileSearchRef = useRef<HTMLDivElement>(null)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  // Guards two independent races:
+  //   searchTokenRef  — a slow response for an older query must not overwrite
+  //                     the results of a newer one (no ordering before this).
+  //   closeTimerRef   — the 200ms blur close must not fire after the panel was
+  //                     deliberately reopened.
+  const searchTokenRef = useRef(0)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout>>()
   const { locale } = useLocale()
   const { items: recentSearches, add: addRecentSearch, remove: removeRecentSearch, clear: clearRecentSearches } = useSearchHistory()
 
@@ -363,8 +388,61 @@ export default function Navbar() {
   const isActive = (path: string) => location.pathname === path
 
   useEffect(() => {
-    return () => { clearTimeout(searchTimerRef.current) }
+    return () => {
+      clearTimeout(searchTimerRef.current)
+      clearTimeout(closeTimerRef.current)
+    }
   }, [])
+
+  // A route change ends the search interaction: navigating away with the field
+  // still open left it hanging over the new page.
+  useEffect(() => {
+    setDesktopSearchOpen(false)
+    setMobileSearchOpen(false)
+    setShowSearchResults(false)
+    setShowTrending(false)
+    setActiveIndex(-1)
+    // A late response for a query typed on the previous page must not reopen
+    // the panel on the new one.
+    searchTokenRef.current++
+  }, [location.pathname])
+
+  // A search field is a disclosure: a click anywhere outside its wrapper (a nav
+  // link, the region picker, the page behind) collapses it. The generic
+  // outside-click handler below deliberately ignores clicks inside <nav>, so
+  // these wrappers own their own case. The toggle buttons carry
+  // data-search-toggle and are exempt — without that, tapping the icon to close
+  // would close on pointerdown and the click would immediately reopen it.
+  useEffect(() => {
+    if (!desktopSearchOpen && !mobileSearchOpen) return
+    const onDown = (e: PointerEvent) => {
+      const target = e.target as Element | null
+      if (target?.closest?.('[data-search-toggle]')) return
+      const node = e.target as Node
+      if (desktopSearchOpen && !desktopSearchRef.current?.contains(node)) setDesktopSearchOpen(false)
+      if (mobileSearchOpen && !mobileSearchRef.current?.contains(node)) setMobileSearchOpen(false)
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
+  }, [desktopSearchOpen, mobileSearchOpen])
+
+  const closeSearchField = useCallback(() => {
+    setDesktopSearchOpen(false)
+    setMobileSearchOpen(false)
+    setShowSearchResults(false)
+    setShowTrending(false)
+    setActiveIndex(-1)
+    // Drop any in-flight response for the query that was being typed.
+    searchTokenRef.current++
+  }, [])
+
+  const toggleMobileSearch = useCallback(() => {
+    if (mobileSearchOpen) {
+      closeSearchField()
+    } else {
+      setMobileSearchOpen(true)
+    }
+  }, [mobileSearchOpen, closeSearchField])
 
   // Tap/click outside or Escape dismisses the mobile menu and the search panels.
   // Before this, a phone user could only close the menu by hitting the hamburger
@@ -401,10 +479,15 @@ export default function Navbar() {
       setShowSearchResults(false)
       return
     }
+    // Ordering guard: typing "aveng" fires a request for "aven" 400ms earlier.
+    // Both used to land on the same state, so a slow first response could
+    // overwrite the newer one with stale rows. Only the newest query may write.
+    const token = ++searchTokenRef.current
     try {
       const data = await fetchWithRateLimit<SearchResponse>(
         `/search/multi?query=${encodeURIComponent(query)}&language=${locale}&include_adult=false&page=1`
       )
+      if (token !== searchTokenRef.current) return
       // Movie and TV ids live in separate TMDB namespaces, so `${type}-${id}` is the
       // only collision-safe key. Dedupe on it: the dropdown keyed rows by bare id before,
       // which React could silently collapse/mismatch.
@@ -429,6 +512,7 @@ export default function Navbar() {
       setActiveIndex(-1)
       setShowSearchResults(true)
     } catch {
+      if (token !== searchTokenRef.current) return
       setSearchResults([])
       setActiveIndex(-1)
     }
@@ -469,11 +553,23 @@ export default function Navbar() {
 
   // Focus moving INTO the dropdown (trending chips, result rows, "see all")
   // must not dismiss it — otherwise keyboard users could never reach those
-  // controls, and pointer clicks depended on the 200ms race below.
+  // controls, and pointer clicks depended on the 200ms race below. The timer is
+  // tracked and cancelled when a panel reopens, so a delayed close can never
+  // land on a panel the user just brought back.
   const closeSearchPanels = useCallback((e: FocusEvent<HTMLInputElement>) => {
     const next = e.relatedTarget as Element | null
     if (next?.closest?.('[data-search-panel]')) return
-    setTimeout(() => { setShowSearchResults(false); setShowTrending(false) }, 200)
+    clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = setTimeout(() => {
+      setShowSearchResults(false)
+      setShowTrending(false)
+    }, 200)
+  }, [])
+
+  const openPanel = useCallback((which: 'trending' | 'results') => {
+    clearTimeout(closeTimerRef.current)
+    if (which === 'trending') setShowTrending(true)
+    else setShowSearchResults(true)
   }, [])
 
   const goToDetail = (id: number, mediaType: 'movie' | 'tv') => {
@@ -482,6 +578,8 @@ export default function Navbar() {
     setSearchInput('')
     setShowSearchResults(false)
     setActiveIndex(-1)
+    setDesktopSearchOpen(false)
+    setMobileSearchOpen(false)
     navigate(`/${mediaType}/${id}`)
   }
 
@@ -493,6 +591,8 @@ export default function Navbar() {
     setShowTrending(false)
     setActiveIndex(-1)
     setMenuOpen(false)
+    setDesktopSearchOpen(false)
+    setMobileSearchOpen(false)
     navigate(`/search?q=${encodeURIComponent(q)}`)
   }
 
@@ -538,38 +638,63 @@ export default function Navbar() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 flex-1 justify-end max-w-xl">
-            {/* Search Bar */}
-            <div className="hidden md:flex relative w-full max-w-[280px]">
-              <SearchField
-                variant="desktop"
-                searchInput={searchInput}
-                onSearchInput={onSearchInput}
-                onEnter={onSearchEnter}
-                onKeyNav={(key) => handleResultKeyNav(key)}
-                onFocus={() => {
-                  if (!searchInput) setShowTrending(true)
-                  else if (searchResults.length > 0) setShowSearchResults(true)
-                }}
-                onBlur={closeSearchPanels}
-                expanded={showTrending || showSearchResults}
-                listboxId="search-panel-desktop"
-              />
-              <SearchPanel
-                id="search-panel-desktop"
-                showTrending={showTrending}
-                showSearchResults={showSearchResults}
-                searchResults={searchResults}
-                activeIndex={activeIndex}
-                searchInput={searchInput}
-                recentSearches={recentSearches}
-                onPickTerm={(term) => { setSearchInput(term); handleSearch(term); setShowTrending(false) }}
-                onPickResult={goToDetail}
-                onSeeAll={() => goToSearchPage()}
-                onRemoveRecent={removeRecentSearch}
-                onClearRecent={clearRecentSearches}
-              />
-            </div>
+          <div className="flex items-center gap-2 md:gap-3 flex-1 justify-end max-w-xl">
+            {/* Desktop search — the icon is the disclosure control and stays put,
+                so it also closes the field it opened. The field, its dropdown and
+                the outside-click wrapper only exist while open, so nothing in the
+                navbar reserves space for a search bar nobody asked for. */}
+            <button
+              type="button"
+              data-search-toggle
+              onClick={() => {
+                if (desktopSearchOpen) closeSearchField()
+                else setDesktopSearchOpen(true)
+              }}
+              aria-label={desktopSearchOpen ? 'Close search' : 'Open search'}
+              aria-expanded={desktopSearchOpen}
+              className={`hidden md:grid h-9 w-9 place-items-center rounded-full bg-surface-elevated border transition-colors active:scale-95 shrink-0 ${
+                desktopSearchOpen ? 'border-accent text-accent' : 'border-zinc-800 text-text-muted hover:border-accent hover:text-accent'
+              }`}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </button>
+            {desktopSearchOpen && (
+              <div ref={desktopSearchRef} className="hidden md:flex relative w-full max-w-[280px]">
+                <SearchField
+                  variant="desktop"
+                  searchInput={searchInput}
+                  onSearchInput={onSearchInput}
+                  onEnter={onSearchEnter}
+                  onKeyNav={(key) => handleResultKeyNav(key)}
+                  onEscape={closeSearchField}
+                  onFocus={() => {
+                    if (!searchInput) openPanel('trending')
+                    else if (searchResults.length > 0) openPanel('results')
+                  }}
+                  onBlur={closeSearchPanels}
+                  expanded={showTrending || showSearchResults}
+                  listboxId="search-panel-desktop"
+                  autoFocus
+                />
+                <SearchPanel
+                  id="search-panel-desktop"
+                  showTrending={showTrending}
+                  showSearchResults={showSearchResults}
+                  searchResults={searchResults}
+                  activeIndex={activeIndex}
+                  searchInput={searchInput}
+                  recentSearches={recentSearches}
+                  onPickTerm={(term) => { setSearchInput(term); handleSearch(term); setShowTrending(false) }}
+                  onPickResult={goToDetail}
+                  onSeeAll={() => goToSearchPage()}
+                  onRemoveRecent={removeRecentSearch}
+                  onClearRecent={clearRecentSearches}
+                />
+              </div>
+            )}
 
             <div className="hidden md:block">
               <LocaleToggle />
@@ -578,9 +703,22 @@ export default function Navbar() {
               <RegionSelect />
             </div>
 
-            {/* Mobile hamburger + locale + region. The compact pickers must be
-                hidden at md+ — without this wrapper they rendered next to the
-                full pickers above, so every route showed doubles. */}
+            {/* Mobile hamburger + search + locale + region. The compact pickers
+                must be hidden at md+ — without this wrapper they rendered next
+                to the full pickers above, so every route showed doubles. */}
+            <button
+              type="button"
+              data-search-toggle
+              onClick={toggleMobileSearch}
+              aria-label={mobileSearchOpen ? 'Close search' : 'Open search'}
+              aria-expanded={mobileSearchOpen}
+              className="md:hidden grid h-9 w-9 place-items-center rounded-full bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-accent transition-colors active:scale-95 shrink-0"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </button>
             <div className="md:hidden">
               <LocaleToggle compact />
             </div>
@@ -598,38 +736,42 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Mobile search — kept inside the sticky nav so it never scrolls away
-            with the page the way the old bar (below the nav) did. */}
-        <div className="md:hidden relative max-w-[1400px] mx-auto px-4 sm:px-6 pb-3">
-          <SearchField
-            variant="mobile"
-            searchInput={searchInput}
-            onSearchInput={onSearchInput}
-            onEnter={onSearchEnter}
-            onKeyNav={(key) => handleResultKeyNav(key)}
-            onFocus={() => {
-              if (!searchInput) setShowTrending(true)
-              else if (searchResults.length > 0) setShowSearchResults(true)
-            }}
-            onBlur={closeSearchPanels}
-            expanded={showTrending || showSearchResults}
-            listboxId="search-panel-mobile"
-          />
-          <SearchPanel
-            id="search-panel-mobile"
-            showTrending={showTrending}
-            showSearchResults={showSearchResults}
-            searchResults={searchResults}
-            activeIndex={activeIndex}
-            searchInput={searchInput}
-            recentSearches={recentSearches}
-            onPickTerm={(term) => { setSearchInput(term); handleSearch(term); setShowTrending(false) }}
-            onPickResult={goToDetail}
-            onSeeAll={() => goToSearchPage()}
-            onRemoveRecent={removeRecentSearch}
-            onClearRecent={clearRecentSearches}
-          />
-        </div>
+        {/* Mobile search — mounts only after the icon is pressed, inside the
+            sticky nav so it never scrolls away with the page. */}
+        {mobileSearchOpen && (
+          <div ref={mobileSearchRef} className="md:hidden relative max-w-[1400px] mx-auto px-4 sm:px-6 pb-3">
+            <SearchField
+              variant="mobile"
+              searchInput={searchInput}
+              onSearchInput={onSearchInput}
+              onEnter={onSearchEnter}
+              onKeyNav={(key) => handleResultKeyNav(key)}
+              onEscape={closeSearchField}
+              onFocus={() => {
+                if (!searchInput) openPanel('trending')
+                else if (searchResults.length > 0) openPanel('results')
+              }}
+              onBlur={closeSearchPanels}
+              expanded={showTrending || showSearchResults}
+              listboxId="search-panel-mobile"
+              autoFocus
+            />
+            <SearchPanel
+              id="search-panel-mobile"
+              showTrending={showTrending}
+              showSearchResults={showSearchResults}
+              searchResults={searchResults}
+              activeIndex={activeIndex}
+              searchInput={searchInput}
+              recentSearches={recentSearches}
+              onPickTerm={(term) => { setSearchInput(term); handleSearch(term); setShowTrending(false) }}
+              onPickResult={goToDetail}
+              onSeeAll={() => goToSearchPage()}
+              onRemoveRecent={removeRecentSearch}
+              onClearRecent={clearRecentSearches}
+            />
+          </div>
+        )}
 
         {/* Mobile menu overlay — anchored to the nav's own bottom edge instead
             of a hardcoded offset, so it still clears the search bar now that the

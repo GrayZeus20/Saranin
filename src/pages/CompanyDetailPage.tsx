@@ -5,7 +5,8 @@ import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import { ImageWithFallback } from '../components/ImageWithFallback'
 import { TrailerHover } from '../components/TrailerHover'
-import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
+import { fetchWithRateLimit } from '../utils/api'
+import { tmdbImage } from '../utils/imageSizes'
 import { useLocale } from '../utils/locale'
 import { useDocumentTitle } from '../utils/useDocumentTitle'
 
@@ -181,10 +182,12 @@ export default function CompanyDetailPage() {
             {/* One image path for the whole app — the old markup hid a failed
                 logo with inline styles and revealed a sibling span by hand. */}
             <ImageWithFallback
-              src={company.logo_path ? `${IMG_BASE}/w300${company.logo_path}` : ''}
+              src={tmdbImage(company.logo_path, 'logo', 'w300')}
               alt={company.name}
+              kind="logo"
               className="w-full h-full object-contain"
               fallbackText={company.name.charAt(0)}
+              skeletonClassName="rounded"
               sizes="(min-width: 640px) 160px, 128px"
             />
           </div>
@@ -246,8 +249,9 @@ export default function CompanyDetailPage() {
                   {/* Same image path as everywhere else: a 404 poster (TMDB
                       keeps stale paths) degrades to the title's initial. */}
                   <ImageWithFallback
-                    src={item.poster_path ? `${IMG_BASE}/w342${item.poster_path}` : ''}
+                    src={tmdbImage(item.poster_path, 'poster', 'w342')}
                     alt={item.title}
+                    kind="poster"
                     className="w-full h-full object-cover"
                     fallbackText={item.title.charAt(0)}
                     sizes="(min-width: 1024px) 20vw, (min-width: 768px) 25vw, (min-width: 640px) 33vw, 50vw"

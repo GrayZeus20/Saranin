@@ -10,7 +10,8 @@ import ScrollRow from './components/ScrollRow'
 import { WatchButton } from './components/WatchButton'
 import Footer from './components/Footer'
 import { DiscoverFilterSections, type DiscoverFilterValue } from './components/DiscoverFilterSections'
-import { fetchWithRateLimit, IMG_BASE, TMDB_TOKEN } from './utils/api'
+import { fetchWithRateLimit, TMDB_TOKEN } from './utils/api'
+import { tmdbImage } from './utils/imageSizes'
 import { formatDate, GENRE_MAP } from './utils/constants'
 import { normalizeMovie, normalizeTv, dedupById, type Movie } from './utils/tmdb'
 import { getRegionProviders } from './utils/providers'
@@ -71,10 +72,6 @@ function matchesContentType(m: Movie, type: ContentType): boolean {
   // "TV Series" must not double-count anime — those belong to the Anime filter.
   if (type === 'tv') return m.media_type === 'tv' && !isAnime(m)
   return m.media_type === type
-}
-
-function posterUrl(path: string | null, size = 'w342'): string {
-  return path ? `${IMG_BASE}/${size}${path}` : ''
 }
 
 function SkeletonCard() {
@@ -169,8 +166,9 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink,
             <div key={`${title}-${m.media_type ?? 'movie'}-${m.id}`} onClick={() => onMovieClick(m)} className="shrink-0 w-28 sm:w-32 md:w-36 cursor-pointer transition-transform duration-200 hover:scale-105 active:scale-95">
               <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
                 <ImageWithFallback
-                  src={posterUrl(m.poster_path)}
+                  src={tmdbImage(m.poster_path, 'poster', 'w342')}
                   alt={m.title}
+                  kind="poster"
                   className="w-full h-full object-cover"
                   sizes="(min-width: 768px) 144px, (min-width: 640px) 128px, 112px"
                 />
@@ -590,13 +588,17 @@ export default function App() {
           radial-gradient() whose color stops were url(...) values, which is invalid
           CSS and painted nothing; this is a real image layer with a CSS fade mask. */}
       {isFirstPage && featured?.backdrop_path ? (
-        <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
-          <img
-            src={`${IMG_BASE}/w1280${featured.backdrop_path}`}
+        <div
+          className="fixed inset-0 pointer-events-none z-0 overflow-hidden opacity-20"
+          aria-hidden="true"
+          style={{ maskImage: 'linear-gradient(to bottom, black, transparent 85%)', WebkitMaskImage: 'linear-gradient(to bottom, black, transparent 85%)' }}
+        >
+          <ImageWithFallback
+            src={tmdbImage(featured.backdrop_path, 'backdrop', 'w1280')}
             alt=""
-            onError={(e) => { e.currentTarget.style.display = 'none' }}
-            className="w-full h-[55vh] object-cover object-top opacity-20 blur-3xl scale-125"
-            style={{ maskImage: 'linear-gradient(to bottom, black, transparent 85%)', WebkitMaskImage: 'linear-gradient(to bottom, black, transparent 85%)' }}
+            kind="backdrop"
+            hideOnError
+            className="w-full h-[55vh] object-cover object-top blur-3xl scale-125"
           />
         </div>
       ) : null}
@@ -615,12 +617,12 @@ export default function App() {
           >
             <div className="relative h-[50vh] sm:h-[60vh] md:h-[75vh]">
               {featured.backdrop_path ? (
-                <img
-                  src={`${IMG_BASE}/w1280${featured.backdrop_path}`}
+                <ImageWithFallback
+                  src={tmdbImage(featured.backdrop_path, 'backdrop', 'w1280')}
                   alt={featured.title}
-                  fetchPriority="high"
-                  decoding="async"
-                  onError={(e) => { e.currentTarget.style.display = 'none' }}
+                  kind="backdrop"
+                  priority
+                  fallbackText={null}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
               ) : (
@@ -859,13 +861,15 @@ export default function App() {
                         }`}
                       >
                         {p.logo_path && (
-                          <img
-                            src={`${IMG_BASE}/w45${p.logo_path}`}
-                            alt={p.provider_name}
-                            onError={(e) => { e.currentTarget.style.display = 'none' }}
-                            className="w-4 h-4 rounded-sm object-cover"
-                            loading="lazy"
-                          />
+                          <span className="relative w-4 h-4 shrink-0">
+                            <ImageWithFallback
+                              src={tmdbImage(p.logo_path, 'logo', 'w45')}
+                              alt={p.provider_name}
+                              kind="logo"
+                              fallbackText={null}
+                              className="w-full h-full rounded-sm object-cover"
+                            />
+                          </span>
                         )}
                         {p.provider_name}
                       </button>
@@ -939,8 +943,9 @@ export default function App() {
                   {movie.poster_path ? (
                     <>
                       <ImageWithFallback
-                        src={`${IMG_BASE}/w342${movie.poster_path}`}
+                        src={tmdbImage(movie.poster_path, 'poster', 'w342')}
                         alt={movie.title}
+                        kind="poster"
                         className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
                         sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw"
                       />

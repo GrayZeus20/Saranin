@@ -1,27 +1,41 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { buildSrcSet, isValidSize, sizeTokenOf, type ImageKind } from '../utils/imageSizes'
 
-// TMDB serves every asset at a fixed ladder of widths. A poster is requested
-// once per breakpoint tier and the browser picks by viewport + DPR, instead of
-// every phone pulling the desktop-sized file.
-const TMDB_SIZES = ['w92', 'w154', 'w185', 'w300', 'w342', 'w500', 'w780', 'original'] as const
-
-function buildSrcSet(src: string): string | undefined {
-  const match = src.match(/^(.*\/)(w\d+|original)(\/.*)$/)
-  if (!match) return undefined
-  const [, prefix, current, suffix] = match
-  const index = TMDB_SIZES.indexOf(current as (typeof TMDB_SIZES)[number])
-  if (index === -1) return undefined
-  // Only offer variants at or above the requested size — never make the browser
-  // download a *smaller* file than the call site asked for, and never claim
-  // width descriptors we cannot know ("original" has no fixed width).
-  const variants = TMDB_SIZES.slice(index, -1)
-  if (variants.length < 2) return undefined
-  const widths: Record<string, number> = { w92: 92, w154: 154, w185: 185, w300: 300, w342: 342, w500: 500, w780: 780 }
-  return variants.map((size) => `${prefix}${size}${suffix} ${widths[size]}w`).join(', ')
-}
-
-export function ImageWithFallback({ src, alt, className, fallbackText, sizes }: {
-  src: string; alt: string; className?: string; fallbackText?: string; sizes?: string
+// One image element for the whole app. Two things it must never get wrong:
+//
+//  1. The srcset must only offer width tokens that belong to THIS image's type.
+//     TMDB 404s a token from another type's ladder, which is how actor
+//     portraits and production logos used to vanish on HiDPI screens.
+//  2. A failure must leave something visible in place of the image. The old
+//     bare <img> call sites hid themselves with `style.display = 'none'` and
+//     left a blank hole — and because that mutation outlived the element, a
+//     later valid src stayed hidden too.
+export function ImageWithFallback({ src, alt, className, fallbackText, fallbackClassName, skeletonClassName, sizes, kind = 'poster', priority = false, hideOnError = false }: {
+  src: string
+  /**
+   * Optional on purpose. The type says every caller has a title, but the API
+   * does not always agree — a TV payload's nested results have `name`, not
+   * `title`, so `alt` can arrive undefined. Reading `.charAt` off it crashed
+   * the entire detail tree; an image component must never be able to do that.
+   */
+  alt?: string
+  className?: string
+  /** undefined → the alt text's first letter. null → render no letter at all. */
+  fallbackText?: string | null
+  fallbackClassName?: string
+  /** Radius for the loading skeleton — matches the host box. */
+  skeletonClassName?: string
+  sizes?: string
+  /** Which TMDB ladder this image's path belongs to. */
+  kind?: ImageKind
+  /** Above-the-fold hero: load eagerly instead of lazily. */
+  priority?: boolean
+  /**
+   * Decorative layer: paint nothing at all when the image cannot load. Without
+   * this a failed image still paints its placeholder box, which behind a blur
+   * and a low-opacity mask reads as a grey wash over the page.
+   */
+  hideOnError?: boolean
 }) {
   const [error, setError] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -30,7 +44,20 @@ export function ImageWithFallback({ src, alt, className, fallbackText, sizes }: 
   // Only offer a srcset when the call site also declares `sizes`. Without one
   // the browser treats the srcset as 100vw and every tiny thumbnail asks for
   // the largest variant — worse than the plain src it replaced.
-  const srcSet = useMemo(() => (src && sizes ? buildSrcSet(src) : undefined), [src, sizes])
+  const srcSet = useMemo(() => buildSrcSet(src, kind, sizes), [src, kind, sizes])
+
+  // Dev-only watchdog for the exact class of bug this component exists to
+  // survive: a call site asking for a size its image type does not ship. It is
+  // invisible in production, where it would be noise rather than a fix.
+  useEffect(() => {
+    if (!import.meta.env?.DEV || !src) return
+    const token = sizeTokenOf(src)
+    if (isValidSize(kind, token)) return
+    console.warn(
+      `[image] "${token ?? 'unrecognised size'}" is not a valid ${kind} size — this request will 404. ` +
+      `See utils/imageSizes.ts for the per-type ladder. src=${src}`
+    )
+  }, [src, kind])
 
   // A mounted instance can be handed a new src (rail cards and grids get reused
   // as data swaps under them), and the previous instance's verdict no longer
@@ -45,29 +72,35 @@ export function ImageWithFallback({ src, alt, className, fallbackText, sizes }: 
     if (img?.complete && img.naturalWidth > 0) setLoaded(true)
   }, [src])
 
+  const letter = fallbackText !== undefined ? fallbackText : (alt || '').charAt(0)
+
   if (error || !src) {
+    if (hideOnError) return null
     return (
-      <div className={`flex items-center justify-center bg-zinc-800 text-zinc-600 ${className}`}>
-        <span className="text-2xl font-bold">{fallbackText || alt.charAt(0)}</span>
+      <div className={`flex items-center justify-center bg-zinc-800 text-zinc-600 ${className || ''} ${fallbackClassName || ''}`}>
+        {letter ? <span className="text-2xl font-bold">{letter}</span> : null}
       </div>
     )
   }
 
   return (
     <>
-      {!loaded && <div className={`absolute inset-0 skeleton rounded-xl`} />}
+      {!loaded && <div className={`absolute inset-0 skeleton ${skeletonClassName || 'rounded-xl'}`} />}
       <img
         ref={imgRef}
         src={src}
         srcSet={srcSet}
         sizes={sizes}
-        alt={alt}
+        alt={alt || ''}
         className={`${className} ${loaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
         onLoad={() => setLoaded(true)}
         onError={() => setError(true)}
-        loading="lazy"
+        loading={priority ? 'eager' : 'lazy'}
+        fetchPriority={priority ? 'high' : undefined}
         decoding="async"
       />
     </>
   )
 }
+
+export default ImageWithFallback

@@ -7,7 +7,8 @@ import { TrailerHover } from '../components/TrailerHover'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import { WatchButton } from '../components/WatchButton'
-import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
+import { fetchWithRateLimit } from '../utils/api'
+import { tmdbImage } from '../utils/imageSizes'
 import { GENRE_MAP, formatDate } from '../utils/constants'
 import { normalizeMovie, normalizeTv, dedupById, type Movie } from '../utils/tmdb'
 import { getRegionProviders } from '../utils/providers'
@@ -403,13 +404,15 @@ export default function CategoryPage() {
                       }`}
                     >
                       {p.logo_path && (
-                        <img
-                          src={`${IMG_BASE}/w45${p.logo_path}`}
-                          alt={p.provider_name}
-                          onError={(e) => { e.currentTarget.style.display = 'none' }}
-                          className="w-4 h-4 rounded-sm object-cover"
-                          loading="lazy"
-                        />
+                        <span className="relative w-4 h-4 shrink-0">
+                          <ImageWithFallback
+                            src={tmdbImage(p.logo_path, 'logo', 'w45')}
+                            alt={p.provider_name}
+                            kind="logo"
+                            fallbackText={null}
+                            className="w-full h-full rounded-sm object-cover"
+                          />
+                        </span>
                       )}
                       {p.provider_name}
                     </button>
@@ -482,7 +485,7 @@ export default function CategoryPage() {
               {filteredMovies.map((m) => (
                 <Link key={`${m.media_type}-${m.id}`} to={m.media_type === 'tv' ? `/tv/${m.id}` : `/movie/${m.id}`} className="block group">
                   <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
-                    <ImageWithFallback src={m.poster_path ? `${IMG_BASE}/w342${m.poster_path}` : ''} alt={m.title} sizes="(min-width: 1280px) 20vw, (min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                    <ImageWithFallback src={tmdbImage(m.poster_path, 'poster', 'w342')} alt={m.title} kind="poster" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" sizes="(min-width: 1280px) 20vw, (min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw" />
                     <TrailerHover mediaType={m.media_type === 'tv' ? 'tv' : 'movie'} id={m.id} title={m.title} />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
