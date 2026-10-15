@@ -17,7 +17,12 @@ function securityHeaders() {
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "img-src 'self' https://image.tmdb.org https://*.fontsource.org data:",
           "font-src 'self' https://fonts.gstatic.com data:",
-          "connect-src 'self' https://api.themoviedb.org",
+          // image.tmdb.org must be in connect-src, not just img-src. Chrome
+          // refuses the img request outright (net::ERR_FAILED, no response)
+          // when the host is missing here, and the service worker's own
+          // fetch() for posters is a connect-src request by definition.
+          // Omitting it killed every poster on every page.
+          "connect-src 'self' https://api.themoviedb.org https://image.tmdb.org",
           "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
           "media-src 'self' https://*.tmdb.org",
           "object-src 'none'",

@@ -6,7 +6,7 @@ import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import { ImageWithFallback } from '../components/ImageWithFallback'
 import { WatchButton } from '../components/WatchButton'
-import { IMG_BASE } from '../utils/api'
+import { tmdbImage } from '../utils/imageSizes'
 import { formatDate } from '../utils/constants'
 import { useWatchlist } from '../utils/watchlist'
 import { useDocumentTitle } from '../utils/useDocumentTitle'
@@ -72,8 +72,9 @@ export default function WatchlistPage() {
                 <Link to={`/${entry.media_type}/${entry.id}`} className="block">
                   <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
                     <ImageWithFallback
-                      src={entry.poster_path ? `${IMG_BASE}/w342${entry.poster_path}` : ''}
+                      src={tmdbImage(entry.poster_path, 'poster', 'w342')}
                       alt={entry.title}
+                      kind="poster"
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                       sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw"
                     />

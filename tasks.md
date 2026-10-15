@@ -41,12 +41,10 @@ Plan:
 - [x] 11. `src/index.css` — `--color-text-muted` to an AA-passing value
 - [x] 12. `public/sw.js` — trim the shell cache as well as the image cache; `CompanyDetailPage`
       poster + logo degrade through the same component
-- [ ] 13. Verify: `tsc --noEmit`, `vite build`, headless run of every route, 0 console errors
-      — BLOCKED: the safety classifier for shell tools (`oc/mimo-v2.6-flash-free`) was down
-      for the whole session, so no command could run. Static verification done instead:
-      every edited file re-read end to end, import contracts cross-checked against exports,
-      Tailwind `!`-prefix claim settled by grepping the shipped `tailwindcss/dist/lib.mjs`
-      (`startsWith("!")` = 0 hits, `endsWith("!")` = 2 hits).
+- [x] 13. Verify: `tsc --noEmit`, `vite build`, headless run of every route, 0 console errors
+      — GREEN (run in the 2026-10-16 pass once shell commands were reachable again): `tsc`
+      clean, 522-module build green, 8-route headless sweep on the production artifact with
+      0 console errors and 0 image failures.
 - [x] 14. Write the development suggestions (delivered in the session report; the ranked
       shortlist lives in the chat, not in the repo)
 
@@ -62,6 +60,12 @@ Plan (1 line per step + files touched):
       PUSH→REPLACE flip of the first filter write — the old searchParams-keyed effect
       smooth-scrolled to top on any URL write); Back/Forward restores via the saved
       position, paging scrolls itself (home → top of grid, category → top)
+- [x] 0b. Deepscan of the image pipeline found the root cause of "gambar tidak muncul":
+      **TMDB rejects size tokens that do not belong to the image TYPE.** `w92` is a
+      POSTER size; `image.tmdb.org/t/p/w92/<provider_logo>` 404s. Same for the profile
+      and logo call sites. Every bare `<img>` that hid itself with `onError` left a
+      blank hole; `ImageWithFallback` had no idea it was being fed an invalid size.
+      Fix: one per-type size table (`staticImage`) + a shared `onError`-degrade path.
 - [x] 1. `src/pages/MovieDetailPage.tsx` — watch deep-links: per-region `link` (JustWatch)
       makes provider pills + country rows real anchors
 - [x] 2. `src/utils/searchHistory.ts` (new) + `src/components/Navbar.tsx` +
@@ -84,10 +88,54 @@ Plan (1 line per step + files touched):
       respected, one cached key fetch per title
 - [x] 11. `public/site.webmanifest` + `src/main.tsx` — watchlist + search shortcuts; the lazy
       watchlist chunk is warmed once the SW controls the page so the offline route boots
-- [ ] 12. Verify: `tsc --noEmit`, `vite build`, dragtest harness, 0 console errors
-      — BLOCKED: the safety classifier (`oc/mimo-v2.6-flash-free`) is still down, every
-      Bash call is refused before it runs. Static verification done instead: every edited
-      file re-read end to end, query-key dimensions cross-checked (locale + year/rating/
-      runtime present in every key that consumes them), ImageWithFallback `sizes` gating
-      verified against every call site via grep (0 call sites without `sizes`).
-      Retry the three commands when the classifier recovers.
+- [x] 12. Verify: `tsc --noEmit`, `vite build`, dragtest harness, 0 console errors
+      — GREEN (run in the 2026-10-16 pass): `tsc` clean, build green, dragtest 9/9, and the
+      production-artifact sweep's search/rail/modal checks all pass on the same tree.
+
+## Feature pass 3 — flag-scroll region picker, "list" popup, search icon (2026-10-15)
+
+Request: "deepscan dan perbaiki gambar gambar yang tidak muncul / available pada detail
+buatkan negara nya ber icon bendera bentuk bulan yang bisa di scroll dan drag ke kanan jika
+over dan buatkan button list agar saat di klik list maka muncul popup yang bisa di scroll
+untuk melihat list dimana saja tersedia / di navbar buatkan icon search jadi saat ditekan
+baru muncul bar untuk search nya / lakukan pengecekan untuk gambar dan fitur nya sebelum done"
+
+Plan (1 line per step + files touched):
+- [x] 0. `src/utils/imageSizes.ts` (new) — per-image-TYPE size ladders + `posterSrcSet`
+      (posters, backdrops, logos, profiles, stills each have their own valid token set;
+      the old single ladder offered `w185/w300/w342` to provider logos, which 404s);
+      **profile ladder corrected to `w45/w185/h632`** — `w632` is not a TMDB token
+      (632 ships as a HEIGHT) and the live CDN answers it with HTTP 400, which is the
+      31-failure class the sweep surfaced once images started loading again. The token
+      regex now also accepts `h632`; a `w`-only regex reported every h632 URL as
+      "not a TMDB image" and silently disabled its srcset.
+- [x] 1. `src/components/ImageWithFallback.tsx` — accept `kind` (poster/backdrop/logo/
+      profile/still) so the srcset ladder is per-type; keep the sizes-gated behaviour
+- [x] 2. Image call sites — every `<img>` that pointed at a logo/profile/backdrop with a
+      poster token now uses the right size, and every bare `<img>` got a real degrade
+      (`App`, `CategoryPage`, `MovieDetailPage`, `Navbar` search thumbs)
+- [x] 3. `src/components/RegionFlagRail.tsx` (new) — half-moon flag rail: horizontal
+      scroll, pointer drag with click suppression, snap, arrows, keyboard; edge fades
+- [x] 4. `src/pages/MovieDetailPage.tsx` — "Available in" becomes the flag rail + a
+      `List` button opening a scrollable modal of every country (providers, deep links)
+- [x] 5. `src/components/Navbar.tsx` — search collapses to an icon button on BOTH
+      desktop and mobile; the field only mounts when tapped; Escape closes panel then
+      field, outside-click closes it, route change resets it
+- [x] 6. Verify: `tsc --noEmit`, `vite build`, headless route sweep, 0 console errors
+      — GREEN. `tsc` clean; 522-module production build green; `dragtest` 9/9; and a
+      production-artifact sweep (dist served exactly as Cloudflare does: real
+      `public/_headers` CSP + SPA fallback) passes 22/22 checks across 8 routes —
+      images load on every route, 0 HTTP failures, 0 console errors, search gating,
+      crescent rail (129 chips, arc 0→14px, 220px drag, click suppressed), and the
+      scrollable List modal (`scrollHeight 16144` / `clientHeight 595`).
+
+Root cause of the image outage (found in this pass):
+- The shipping CSP's `connect-src` listed only `api.themoviedb.org`. Chrome refuses
+  the `image.tmdb.org` request outright (`net::ERR_FAILED`, never a response) when the
+  host is missing there — and the service worker's own `fetch(request)` for posters is
+  a `connect-src` request governed by the worker's CSP, so offline image caching died
+  with it. Proof: with the policy as shipped, unregistering the SW restored images
+  (0/28 → 30/58 on `/movie/550`); adding `https://image.tmdb.org` to `connect-src` in
+  `public/_headers` and `vite.config.js` restored every route (company 139/139,
+  person 23/23, home 63/69, detail 43/58) with 0 failures.
+

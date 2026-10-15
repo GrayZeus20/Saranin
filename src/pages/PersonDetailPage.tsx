@@ -4,7 +4,8 @@ import { motion } from 'motion/react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import { ImageWithFallback } from '../components/ImageWithFallback'
-import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
+import { fetchWithRateLimit } from '../utils/api'
+import { tmdbImage } from '../utils/imageSizes'
 import { useLocale } from '../utils/locale'
 import { useDocumentTitle } from '../utils/useDocumentTitle'
 
@@ -213,8 +214,9 @@ export default function PersonDetailPage() {
             <div className="shrink-0 w-40 sm:w-48 mx-auto sm:mx-0">
               <div className="relative overflow-hidden rounded-xl shadow-2xl border border-zinc-800">
                 <ImageWithFallback
-                  src={person.profile_path ? `${IMG_BASE}/w342${person.profile_path}` : ''}
+                  src={tmdbImage(person.profile_path, 'profile', 'w185')}
                   alt={person.name}
+                  kind="profile"
                   className="w-full aspect-[2/3] object-cover"
                   sizes="(min-width: 640px) 192px, 160px"
                 />
@@ -314,8 +316,9 @@ export default function PersonDetailPage() {
                   >
                     <div className="relative shrink-0 w-12 h-16 rounded-lg overflow-hidden bg-surface-card">
                       <ImageWithFallback
-                        src={credit.poster_path ? `${IMG_BASE}/w185${credit.poster_path}` : ''}
+                        src={tmdbImage(credit.poster_path, 'poster', 'w185')}
                         alt={credit.title}
+                        kind="poster"
                         className="w-full h-full object-cover"
                         fallbackText={credit.media_type === 'tv' ? '📺' : '🎬'}
                         sizes="48px"

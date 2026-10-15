@@ -6,7 +6,8 @@ import { ImageWithFallback } from '../components/ImageWithFallback'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import { WatchButton } from '../components/WatchButton'
-import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
+import { fetchWithRateLimit } from '../utils/api'
+import { tmdbImage } from '../utils/imageSizes'
 import { formatDate, GENRE_MAP } from '../utils/constants'
 import { normalizeMovie, normalizeTv, type Movie } from '../utils/tmdb'
 import { useLocale } from '../utils/locale'
@@ -300,7 +301,7 @@ export default function SearchPage() {
                     className="cursor-pointer"
                   >
                     <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
-                      <ImageWithFallback src={m.poster_path ? `${IMG_BASE}/w342${m.poster_path}` : ''} alt={m.title} className="w-full h-full object-cover" sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw" />
+                      <ImageWithFallback src={tmdbImage(m.poster_path, 'poster', 'w342')} alt={m.title} kind="poster" className="w-full h-full object-cover" sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
                       <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
                         &#9733; {m.vote_average?.toFixed(1)}
