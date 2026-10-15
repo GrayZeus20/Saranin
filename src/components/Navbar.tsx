@@ -1,7 +1,9 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
+import { REGION_MAP } from '../utils/constants'
+import { useRegion } from '../utils/region'
 
 interface SearchResult {
   id: number
@@ -31,6 +33,7 @@ const NAV_LINKS = [
   { label: 'Trending', path: '/category/trending' },
   { label: 'Popular', path: '/category/popular' },
   { label: 'Top Rated', path: '/category/top_rated' },
+  { label: 'Watchlist', path: '/watchlist' },
 ]
 
 const TRENDING_SEARCHES = ['One Piece', 'Demon Slayer', 'Naruto', 'Dragon Ball', 'Jujutsu Kaisen', 'Attack on Titan']
@@ -39,12 +42,13 @@ const TRENDING_SEARCHES = ['One Piece', 'Demon Slayer', 'Naruto', 'Dragon Ball',
 // markup, and a fix to one silently missed the other. One renderer now serves
 // both; only the sizing classes differ.
 function SearchField({
-  variant, searchInput, onSearchInput, onEnter, onFocus, onBlur,
+  variant, searchInput, onSearchInput, onEnter, onKeyNav, onFocus, onBlur,
 }: {
   variant: 'desktop' | 'mobile'
   searchInput: string
   onSearchInput: (value: string) => void
   onEnter: () => void
+  onKeyNav: (key: 'ArrowDown' | 'ArrowUp' | 'Escape') => boolean
   onFocus: () => void
   onBlur: () => void
 }) {
@@ -65,10 +69,20 @@ function SearchField({
         type="text"
         value={searchInput}
         onChange={(e) => onSearchInput(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') onEnter() }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { onEnter(); return }
+          // Arrow keys move through the result list; the panel reports whether
+          // it consumed the key so typing at the ends is unaffected.
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape') {
+            if (onKeyNav(e.key)) e.preventDefault()
+          }
+        }}
         onFocus={onFocus}
         onBlur={onBlur}
         placeholder="Search movies, TV, anime..."
+        role="combobox"
+        aria-expanded={false}
+        aria-autocomplete="list"
         className={`w-full bg-surface-elevated border border-zinc-800 text-text-primary pl-9 rounded-full focus:border-accent focus:outline-none transition-colors placeholder:text-zinc-600 ${sizing}`}
       />
     </>
@@ -76,13 +90,15 @@ function SearchField({
 }
 
 // Dropdown shared by both variants — trending terms when idle, results once a
-// query resolves, plus the "see all" row.
+// query resolves, plus the "see all" row. The result list is a listbox: the
+// input keeps focus and moves `activeIndex` with the arrow keys.
 function SearchPanel({
-  showTrending, showSearchResults, searchResults, searchInput, onPickTerm, onPickResult, onSeeAll,
+  showTrending, showSearchResults, searchResults, activeIndex, searchInput, onPickTerm, onPickResult, onSeeAll,
 }: {
   showTrending: boolean
   showSearchResults: boolean
   searchResults: SearchResult[]
+  activeIndex: number
   searchInput: string
   onPickTerm: (term: string) => void
   onPickResult: (id: number, mediaType: 'movie' | 'tv') => void
@@ -113,30 +129,40 @@ function SearchPanel({
   if (showSearchResults && searchResults.length > 0) {
     return (
       <div className="absolute top-full mt-2 w-full bg-surface-elevated border border-zinc-800 rounded-xl overflow-hidden shadow-2xl z-50">
-        {searchResults.map(movie => (
-          <button
-            key={`${movie.media_type}-${movie.id}`}
-            type="button"
-            onMouseDown={() => onPickResult(movie.id, movie.media_type)}
-            className="w-full flex items-center gap-3 p-2.5 hover:bg-surface-card transition-colors text-left"
-          >
-            <div className="w-8 h-12 rounded-md overflow-hidden bg-surface-card shrink-0">
-              {movie.poster_path ? (
-                <img src={`${IMG_BASE}/w92${movie.poster_path}`} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-zinc-700 text-xs">🎬</div>
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-text-primary text-xs font-bold line-clamp-1">{movie.title}</p>
-              <div className="flex items-center gap-2 text-text-muted text-[10px]">
-                <span>{movie.media_type === 'tv' ? '📺 TV' : '🎬 Movie'}</span>
-                <span>{movie.release_date?.split('-')[0]}</span>
-                {movie.vote_average > 0 && <span className="text-accent">★ {movie.vote_average.toFixed(1)}</span>}
-              </div>
-            </div>
-          </button>
-        ))}
+        {/* aria-live announces the result count as the user types. */}
+        <p className="sr-only" aria-live="polite">
+          {searchResults.length} results available. Use the up and down arrow keys to review them.
+        </p>
+        <ul role="listbox" aria-label="Search results" className="max-h-[60vh] overflow-y-auto">
+          {searchResults.map((movie, index) => (
+            <li key={`${movie.media_type}-${movie.id}`} role="option" aria-selected={index === activeIndex}>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={() => onPickResult(movie.id, movie.media_type)}
+                className={`w-full flex items-center gap-3 p-2.5 transition-colors text-left ${
+                  index === activeIndex ? 'bg-surface-card' : 'hover:bg-surface-card'
+                }`}
+              >
+                <div className="w-8 h-12 rounded-md overflow-hidden bg-surface-card shrink-0">
+                  {movie.poster_path ? (
+                    <img src={`${IMG_BASE}/w92${movie.poster_path}`} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-zinc-700 text-xs">🎬</div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-text-primary text-xs font-bold line-clamp-1">{movie.title}</p>
+                  <div className="flex items-center gap-2 text-text-muted text-[10px]">
+                    <span>{movie.media_type === 'tv' ? '📺 TV' : '🎬 Movie'}</span>
+                    <span>{movie.release_date?.split('-')[0]}</span>
+                    {movie.vote_average > 0 && <span className="text-accent">★ {movie.vote_average.toFixed(1)}</span>}
+                  </div>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
         <button
           type="button"
           onMouseDown={onSeeAll}
@@ -149,6 +175,87 @@ function SearchPanel({
   }
 
   return null
+}
+
+// Region selector — which country's streaming catalog the app shows. Sits in
+// the nav next to the search so it is reachable from every route.
+function RegionSelect({ compact = false }: { compact?: boolean }) {
+  const { region, setRegion } = useRegion()
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  // Regions sorted by name — a 40-entry dropdown in map order is unscannable.
+  const options = useMemo(
+    () => Object.entries(REGION_MAP).sort((a, b) => a[1].name.localeCompare(b[1].name)),
+    [],
+  )
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const current = REGION_MAP[region]
+
+  return (
+    <div ref={wrapRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-label="Change streaming region"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className={`flex items-center gap-1.5 bg-surface-elevated border border-zinc-800 rounded-full text-text-muted hover:border-accent hover:text-text-primary transition-colors active:scale-95 ${
+          compact ? 'px-2.5 py-2 text-xs' : 'px-3 py-2 text-xs'
+        }`}
+      >
+        <span aria-hidden="true">{current?.flag || '🌍'}</span>
+        <span className="font-bold">{region}</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.ul
+            role="listbox"
+            aria-label="Streaming region"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15 }}
+            className="absolute right-0 top-full mt-2 w-56 max-h-72 overflow-y-auto bg-surface-elevated border border-zinc-800 rounded-xl shadow-2xl z-50 py-1"
+          >
+            {options.map(([code, meta]) => (
+              <li key={code} role="option" aria-selected={code === region}>
+                <button
+                  type="button"
+                  onClick={() => { setRegion(code); setOpen(false) }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left transition-colors ${
+                    code === region ? 'text-accent font-bold bg-surface-card' : 'text-text-muted hover:bg-surface-card hover:text-text-primary'
+                  }`}
+                >
+                  <span aria-hidden="true">{meta.flag}</span>
+                  <span className="flex-1 truncate">{meta.name}</span>
+                  <span className="text-text-muted/60 font-mono text-[10px]">{code}</span>
+                </button>
+              </li>
+            ))}
+          </motion.ul>
+        )}
+      </AnimatePresence>
+    </div>
+  )
 }
 
 function MenuIcon({ open }: { open: boolean }) {
@@ -178,6 +285,7 @@ export default function Navbar() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [showSearchResults, setShowSearchResults] = useState(false)
   const [showTrending, setShowTrending] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
   // Check if a nav link is active
@@ -218,6 +326,7 @@ export default function Navbar() {
   const handleSearch = useCallback(async (query: string) => {
     if (!query) {
       setSearchResults([])
+      setActiveIndex(-1)
       setShowSearchResults(false)
       return
     }
@@ -246,11 +355,39 @@ export default function Navbar() {
         if (results.length === 8) break
       }
       setSearchResults(results)
+      setActiveIndex(-1)
       setShowSearchResults(true)
     } catch {
       setSearchResults([])
+      setActiveIndex(-1)
     }
   }, [])
+
+  // Arrow keys walk the dropdown while focus stays in the input; Enter opens
+  // the highlighted row. Returns whether the panel consumed the key.
+  const handleResultKeyNav = useCallback((key: 'ArrowDown' | 'ArrowUp' | 'Escape'): boolean => {
+    if (key === 'Escape') {
+      const wasOpen = showSearchResults || showTrending
+      setShowSearchResults(false)
+      setShowTrending(false)
+      setActiveIndex(-1)
+      return wasOpen
+    }
+    if (!showSearchResults || searchResults.length === 0) {
+      // Down on an idle input re-opens the last result set, if there is one.
+      if (key === 'ArrowDown' && searchResults.length > 0) {
+        setShowSearchResults(true)
+        setActiveIndex(0)
+        return true
+      }
+      return false
+    }
+    const next = key === 'ArrowDown'
+      ? Math.min(activeIndex + 1, searchResults.length - 1)
+      : Math.max(activeIndex - 1, 0)
+    setActiveIndex(next)
+    return true
+  }, [showSearchResults, showTrending, searchResults, activeIndex])
 
   const onSearchInput = (val: string) => {
     setSearchInput(val)
@@ -262,6 +399,7 @@ export default function Navbar() {
   const goToDetail = (id: number, mediaType: 'movie' | 'tv') => {
     setSearchInput('')
     setShowSearchResults(false)
+    setActiveIndex(-1)
     navigate(`/${mediaType}/${id}`)
   }
 
@@ -270,8 +408,19 @@ export default function Navbar() {
     if (!q) return
     setShowSearchResults(false)
     setShowTrending(false)
+    setActiveIndex(-1)
     setMenuOpen(false)
     navigate(`/search?q=${encodeURIComponent(q)}`)
+  }
+
+  // Enter inside the dropdown opens the highlighted row instead of the search page.
+  const onSearchEnter = () => {
+    if (showSearchResults && activeIndex >= 0 && searchResults[activeIndex]) {
+      const picked = searchResults[activeIndex]
+      goToDetail(picked.id, picked.media_type)
+      return
+    }
+    goToSearchPage()
   }
 
   return (
@@ -313,7 +462,8 @@ export default function Navbar() {
                 variant="desktop"
                 searchInput={searchInput}
                 onSearchInput={onSearchInput}
-                onEnter={() => goToSearchPage()}
+                onEnter={onSearchEnter}
+                onKeyNav={(key) => handleResultKeyNav(key)}
                 onFocus={() => {
                   if (!searchInput) setShowTrending(true)
                   else if (searchResults.length > 0) setShowSearchResults(true)
@@ -324,6 +474,7 @@ export default function Navbar() {
                 showTrending={showTrending}
                 showSearchResults={showSearchResults}
                 searchResults={searchResults}
+                activeIndex={activeIndex}
                 searchInput={searchInput}
                 onPickTerm={(term) => { setSearchInput(term); handleSearch(term); setShowTrending(false) }}
                 onPickResult={goToDetail}
@@ -331,7 +482,12 @@ export default function Navbar() {
               />
             </div>
 
-            {/* Mobile hamburger */}
+            <div className="hidden md:block">
+              <RegionSelect />
+            </div>
+
+            {/* Mobile hamburger + region */}
+            <RegionSelect compact />
             <button
               className="md:hidden text-text-primary p-2 active:scale-90 transition-transform"
               onClick={() => setMenuOpen(!menuOpen)}
@@ -350,7 +506,8 @@ export default function Navbar() {
             variant="mobile"
             searchInput={searchInput}
             onSearchInput={onSearchInput}
-            onEnter={() => goToSearchPage()}
+            onEnter={onSearchEnter}
+            onKeyNav={(key) => handleResultKeyNav(key)}
             onFocus={() => {
               if (!searchInput) setShowTrending(true)
               else if (searchResults.length > 0) setShowSearchResults(true)
@@ -361,6 +518,7 @@ export default function Navbar() {
             showTrending={showTrending}
             showSearchResults={showSearchResults}
             searchResults={searchResults}
+            activeIndex={activeIndex}
             searchInput={searchInput}
             onPickTerm={(term) => { setSearchInput(term); handleSearch(term); setShowTrending(false) }}
             onPickResult={goToDetail}

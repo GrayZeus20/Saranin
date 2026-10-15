@@ -3,8 +3,12 @@ import { useParams, Link, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
 import Navbar from '../components/Navbar'
 import ScrollRow from '../components/ScrollRow'
+import { WatchButton } from '../components/WatchButton'
+import Footer from '../components/Footer'
 import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
 import { GENRE_MAP, REGION_MAP, formatDate } from '../utils/constants'
+import { useRegion } from '../utils/region'
+import { useDocumentTitle } from '../utils/useDocumentTitle'
 
 interface WatchProvider {
   provider_id: number
@@ -79,8 +83,11 @@ export default function MovieDetailPage() {
   // The YouTube iframe is only mounted after a tap: an autoloaded embed pulls
   // the whole player on a phone connection before anyone asked for it.
   const [trailerPlaying, setTrailerPlaying] = useState(false)
-  const region = 'ID'
+  const { region } = useRegion()
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Title is set once the payload resolves; the hook ignores the empty string.
+  useDocumentTitle(detail ? `${detail.title} — SARANIN.` : '')
 
   useEffect(() => {
     if (!id) return
@@ -208,7 +215,13 @@ export default function MovieDetailPage() {
           className="relative h-[40vh] sm:h-[50vh] md:h-[60vh]"
         >
           {movie.backdrop_path ? (
-            <img src={`${IMG_BASE}/original${movie.backdrop_path}`} alt={movie.title} className="w-full h-full object-cover" />
+            <img
+              src={`${IMG_BASE}/w1280${movie.backdrop_path}`}
+              alt={movie.title}
+              fetchPriority="high"
+              decoding="async"
+              className="w-full h-full object-cover"
+            />
           ) : (
             <div className="w-full h-full bg-surface-card flex items-center justify-center text-zinc-700 text-4xl font-black">{movie.title}</div>
           )}
@@ -227,10 +240,19 @@ export default function MovieDetailPage() {
           >
             <div className="shrink-0 w-36 sm:w-44 md:w-52 mx-auto sm:mx-0">
               {movie.poster_path ? (
-                <img src={`${IMG_BASE}/w500${movie.poster_path}`} alt={movie.title} className="w-full aspect-[2/3] object-cover rounded-xl shadow-2xl border border-zinc-800" />
+                <img
+                  src={`${IMG_BASE}/w342${movie.poster_path}`}
+                  alt={movie.title}
+                  className="w-full aspect-[2/3] object-cover rounded-xl shadow-2xl border border-zinc-800"
+                />
               ) : (
                 <div className="w-full aspect-[2/3] bg-surface-card rounded-xl flex items-center justify-center text-zinc-700 text-lg font-bold">{movie.title?.charAt(0)}</div>
               )}
+              <WatchButton
+                variant="inline"
+                className="mt-3 w-full justify-center"
+                entry={{ id: movie.id, media_type: isTv ? 'tv' : 'movie', title: movie.title, poster_path: movie.poster_path, vote_average: movie.vote_average, release_date: movie.release_date }}
+              />
             </div>
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-text-primary leading-tight mb-1">{movie.title}</h1>
@@ -459,6 +481,10 @@ export default function MovieDetailPage() {
                         <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1 py-0.5 rounded">
                           ★ {m.vote_average?.toFixed(1)}
                         </div>
+                        <WatchButton
+                          className="!bottom-1.5 !right-1.5 !w-7 !h-7"
+                          entry={{ id: m.id, media_type: isTv ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
+                        />
                       </div>
                       <p className="text-text-primary text-[11px] font-bold line-clamp-1 mt-1.5">{m.title}</p>
                     </Link>
@@ -468,6 +494,8 @@ export default function MovieDetailPage() {
             </motion.div>
           )}
         </div>
+
+        <Footer />
       </div>
     </div>
   )

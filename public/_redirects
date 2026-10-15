@@ -1,0 +1,4 @@
+# Cloudflare Pages SPA fallback — without this, refreshing a deep link like
+# /movie/27205 hits the CDN directly, finds no such file, and 404s instead of
+# letting the router render the page.
+/*    /index.html   200

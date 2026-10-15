@@ -14,6 +14,17 @@ const PersonDetailPage = lazy(() => import('./pages/PersonDetailPage'))
 const CompanyDetailPage = lazy(() => import('./pages/CompanyDetailPage'))
 const CategoryPage = lazy(() => import('./pages/CategoryPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
+const WatchlistPage = lazy(() => import('./pages/WatchlistPage'))
+
+// Offline support: the service worker caches the app shell and viewed posters.
+// Production only — in dev it would serve stale bundles over HMR.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.error('[sw] registration failed', err)
+    })
+  })
+}
 
 // Loading fallback for lazy routes
 function PageLoader() {
@@ -58,6 +69,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route path="/company/:id" element={<CompanyDetailPage />} />
               <Route path="/category/:type" element={<CategoryPage />} />
               <Route path="/search" element={<SearchPage />} />
+              <Route path="/watchlist" element={<WatchlistPage />} />
               <Route path="*" element={<App />} />
             </Routes>
           </Suspense>

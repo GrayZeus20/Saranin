@@ -1,5 +1,69 @@
 # Tasks
 
+## Home filter reset (2026-10-15)
+
+Request: "reset filter ketika di home". Today the only reset lives inside the
+empty-results block, so a user with active filters that still return results has
+no way to clear them from the home view.
+
+Plan:
+- [x] 1. `src/App.tsx` — one `resetFilters` writer (cat/genres/provider/type/page
+      back to defaults); "Reset" button in the grid header whenever a filter is
+      active, so it works without opening the panel; empty-state "Reset All
+      Filters" reuses the same writer; header row wraps instead of overflowing
+- [x] 2. Verify: tsc + build; Playwright at `?cat=top_rated&genres=28&type=anime`
+      → Reset visible → click → query string cleared, button gone, 0 console errors
+
+### Proof (2026-10-15)
+- [CLAIM] reset clears the URL — [PROOF]: hermetic Chromium E2E, start
+  `?cat=top_rated&genres=28&type=anime&page=2` → click → end query `""`
+- [CLAIM] reset only when there is something to reset — [PROOF]: pristine `/`
+  → Reset absent; filtered home → Reset present
+- [CLAIM] error escape hatch — [PROOF]: injected 500s on `/discover` → error
+  screen shows "Reset Filters" → click → query `""` (was `?genres=28&provider=8&type=anime`)
+- [CLAIM] typecheck + build — [PROOF]: `tsc --noEmit` exit 0; `vite build`
+  513 modules, 15.22s
+- Note: fixed a pre-existing badge bug on the way — default `contentType` was
+  `'movie'`, and the count tested `!== 'all'`, so a pristine home showed "1 filter".
+
+## Paket 1+2 + watchlist + region + PWA + CI (2026-10-15)
+
+Request: "1 dan 2, untuk fitur tambahan itu buatkan watchlist jadi user bisa simpan film apa
+yang mau dia nonton nanti dan no 11,12,13".
+Approved: Paket 1 (#1 home URL state, #2 deep-link `_redirects`, #3 hero image sizing),
+Paket 2 (#4 TMDB attribution, #5 per-route title + OG meta, #6 credit poster size,
+#7 search dropdown a11y, #8 dead dep), #9 watchlist, #11 region selector, #12 PWA offline,
+#13 CI drag test. NOT approved: #10 recent searches.
+
+Plan:
+- [x] 1. `src/App.tsx` — home state (page, category, genre, platform, type) ↔ URL search params;
+       back from detail restores the same view + scroll
+- [x] 2. `public/_redirects` — SPA fallback `/* /index.html 200` for deep-link refresh
+- [x] 3. `src/App.tsx` hero + `src/pages/MovieDetailPage.tsx` hero — `original` → `w1280`/`w1920`,
+       `fetchpriority="high"` `decoding="async"`
+- [x] 4. `src/components/Footer.tsx` (new) + wire into `src/main.tsx` — TMDB attribution
+- [x] 5. `src/utils/useDocumentTitle.ts` (new) + per-route titles; OG/twitter meta in `index.html`
+- [x] 6. `src/pages/PersonDetailPage.tsx` — credit posters `w92` → `w342`
+- [x] 7. `src/components/Navbar.tsx` — search dropdown `role="listbox"` + arrow keys + `aria-live`
+- [x] 8. `package.json` — drop unused `vite-plugin-static-copy`
+- [x] 9. `src/utils/watchlist.ts` (new) + save button on cards/detail + `/watchlist` page
+- [x] 10. `src/utils/region.ts` (new) + region dropdown in Navbar; thread through App,
+        CategoryPage, `discover.ts`, `providers.ts` cache, MovieDetailPage
+- [x] 11. `public/sw.js` (new) + register in `src/main.tsx` — offline shell + poster cache
+- [x] 12. `scripts/dragtest/cdp.mjs` Linux chrome paths + `.github/workflows/ci.yml` `test:drag`
+- [x] 13. Verify: tsc, build, drag test, browser run
+
+### Proof (2026-10-15)
+- [CLAIM] typecheck clean — [PROOF]: `tsc --noEmit` exit 0, no diagnostics
+- [CLAIM] production build — [PROOF]: `vite build` 513 modules → dist/, 11.05s
+- [CLAIM] drag test 9/9 — [PROOF]: `node scripts/dragtest/run.mjs` pass:true,
+  dragMovedPx 180, keyboardPagedPx 299, consoleErrorCount 0
+- [CLAIM] lockfile valid — [PROOF]: `JSON.parse(package-lock.json)` → LOCK_JSON_OK
+- [CLAIM] public assets shipped — [PROOF]: dist/ contains `_redirects`, `sw.js`,
+  `site.webmanifest`, `favicon.svg`
+- [CLAIM] CI wired — [PROOF]: `.github/workflows/ci.yml` step `run: npm run test:drag`;
+  `scripts/dragtest/cdp.mjs` has `/usr/bin/google-chrome` + 3 Linux fallbacks
+
 ## Mobile UX pass: drag-scroll rails + mobile hardening (2026-10-15)
 
 Request: "deepscan + bikin user friendly untuk mobile, scroll ke kanan bisa digeser dengan drag".

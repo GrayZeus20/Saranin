@@ -2,7 +2,9 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import Navbar from '../components/Navbar'
+import Footer from '../components/Footer'
 import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
+import { useDocumentTitle } from '../utils/useDocumentTitle'
 
 interface CompanyDetail {
   id: number
@@ -71,6 +73,8 @@ export default function CompanyDetailPage() {
   const [loading, setLoading] = useState(true)
   const [creditsError, setCreditsError] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  useDocumentTitle(company ? `${company.name} — SARANIN.` : '')
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -276,6 +280,7 @@ export default function CompanyDetailPage() {
           <p className="text-text-muted text-center py-20 italic">No productions found for this company.</p>
         )}
       </div>
+      <Footer />
       </div>
     </div>
   )

@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import Navbar from '../components/Navbar'
+import Footer from '../components/Footer'
 import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
+import { useDocumentTitle } from '../utils/useDocumentTitle'
 
 interface PersonDetail {
   id: number
@@ -88,6 +90,8 @@ export default function PersonDetailPage() {
   const [activeTab, setActiveTab] = useState<'cast' | 'crew'>('cast')
   const [visibleCount, setVisibleCount] = useState(FILMOGRAPHY_PAGE)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  useDocumentTitle(person ? `${person.name} — SARANIN.` : '')
 
   // Each tab starts collapsed again — its own list has a different length.
   const selectTab = (tab: 'cast' | 'crew') => {
@@ -302,7 +306,7 @@ export default function PersonDetailPage() {
                     <div className="shrink-0 w-12 h-16 rounded-lg overflow-hidden bg-surface-card">
                       {credit.poster_path ? (
                         <img
-                          src={`${IMG_BASE}/w92${credit.poster_path}`}
+                          src={`${IMG_BASE}/w342${credit.poster_path}`}
                           alt={credit.title}
                           className="w-full h-full object-cover"
                           loading="lazy"
@@ -346,6 +350,7 @@ export default function PersonDetailPage() {
             )}
           </motion.div>
         </div>
+        <Footer />
       </div>
     </div>
   )
