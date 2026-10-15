@@ -3,7 +3,10 @@ import { useParams, Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
+import { ImageWithFallback } from '../components/ImageWithFallback'
+import { TrailerHover } from '../components/TrailerHover'
 import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
+import { useLocale } from '../utils/locale'
 import { useDocumentTitle } from '../utils/useDocumentTitle'
 
 interface CompanyDetail {
@@ -38,14 +41,14 @@ interface DiscoverResponse {
 // Walk the first N pages (bounded so a giant library cannot fire 100 requests).
 const MAX_CREDIT_PAGES = 5
 
-async function fetchCompanyCredits(id: string, signal: AbortSignal): Promise<{ movies: MediaCredit[]; tvShows: MediaCredit[] }> {
+async function fetchCompanyCredits(id: string, signal: AbortSignal, language: string): Promise<{ movies: MediaCredit[]; tvShows: MediaCredit[] }> {
   const collect = async (kind: 'movie' | 'tv'): Promise<MediaCredit[]> => {
     const dateField = kind === 'movie' ? 'primary_release_date' : 'first_air_date'
     const pages: MediaCredit[] = []
     let totalPages = 1
     for (let page = 1; page <= totalPages && page <= MAX_CREDIT_PAGES; page++) {
       const data = await fetchWithRateLimit<DiscoverResponse>(
-        `/discover/${kind}?with_companies=${id}&sort_by=${dateField}.desc&language=en-US&page=${page}`,
+        `/discover/${kind}?with_companies=${id}&sort_by=${dateField}.desc&language=${language}&page=${page}`,
         { signal },
       )
       totalPages = data.total_pages || 1
@@ -73,6 +76,7 @@ export default function CompanyDetailPage() {
   const [loading, setLoading] = useState(true)
   const [creditsError, setCreditsError] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { locale } = useLocale()
 
   useDocumentTitle(company ? `${company.name} — SARANIN.` : '')
 
@@ -89,14 +93,14 @@ export default function CompanyDetailPage() {
     const controller = new AbortController()
     const load = async () => {
       try {
-        const companyData = await fetchWithRateLimit<CompanyDetail>(`/company/${id}?language=en-US`, { signal: controller.signal })
+        const companyData = await fetchWithRateLimit<CompanyDetail>(`/company/${id}?language=${locale}`, { signal: controller.signal })
         if (controller.signal.aborted) return
         setCompany(companyData)
 
         // Company header already resolves — credits are secondary, so a credit
         // failure degrades to an inline notice instead of hiding the whole page.
         try {
-          const { movies: mv, tvShows: tv } = await fetchCompanyCredits(id, controller.signal)
+          const { movies: mv, tvShows: tv } = await fetchCompanyCredits(id, controller.signal, locale)
           if (controller.signal.aborted) return
           setMovies(mv)
           setTvShows(tv)
@@ -118,7 +122,7 @@ export default function CompanyDetailPage() {
 
     load()
     return () => controller.abort()
-  }, [id])
+  }, [id, locale])
 
   if (loading) {
     return (
@@ -173,25 +177,16 @@ export default function CompanyDetailPage() {
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col md:flex-row gap-8 mb-16 items-center md:items-start"
         >
-          <div className="shrink-0 w-32 sm:w-40 h-32 sm:h-40 bg-white rounded-2xl p-4 sm:p-6 flex items-center justify-center shadow-xl border border-zinc-800">
-            {company.logo_path ? (
-              <img
-                src={`${IMG_BASE}/w300${company.logo_path}`}
-                alt={company.name}
-                className="max-w-full max-h-full object-contain"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none'
-                  const fallback = e.currentTarget.nextElementSibling as HTMLElement
-                  if (fallback) fallback.style.display = 'flex'
-                }}
-              />
-            ) : null}
-            <span
-              className={`text-black text-3xl font-black ${company.logo_path ? 'hidden' : 'flex'}`}
-              style={company.logo_path ? { display: 'none' } : undefined}
-            >
-              {company.name.charAt(0)}
-            </span>
+          <div className="relative shrink-0 w-32 sm:w-40 h-32 sm:h-40 bg-white rounded-2xl p-4 sm:p-6 flex items-center justify-center shadow-xl border border-zinc-800 overflow-hidden">
+            {/* One image path for the whole app — the old markup hid a failed
+                logo with inline styles and revealed a sibling span by hand. */}
+            <ImageWithFallback
+              src={company.logo_path ? `${IMG_BASE}/w300${company.logo_path}` : ''}
+              alt={company.name}
+              className="w-full h-full object-contain"
+              fallbackText={company.name.charAt(0)}
+              sizes="(min-width: 640px) 160px, 128px"
+            />
           </div>
 
           <div className="flex-1 text-center md:text-left">
@@ -248,18 +243,18 @@ export default function CompanyDetailPage() {
             >
               <Link to={`/${item.media_type}/${item.id}`} className="group block">
                 <div className="relative aspect-[2/3] overflow-hidden rounded-xl bg-surface-card border border-zinc-800 transition-transform duration-300 group-hover:scale-105 group-hover:border-accent/50">
-                  {item.poster_path ? (
-                    <img
-                      src={`${IMG_BASE}/w500${item.poster_path}`}
-                      alt={item.title}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-zinc-700 text-sm font-bold">{item.title.charAt(0)}</div>
-                  )}
+                  {/* Same image path as everywhere else: a 404 poster (TMDB
+                      keeps stale paths) degrades to the title's initial. */}
+                  <ImageWithFallback
+                    src={item.poster_path ? `${IMG_BASE}/w342${item.poster_path}` : ''}
+                    alt={item.title}
+                    className="w-full h-full object-cover"
+                    fallbackText={item.title.charAt(0)}
+                    sizes="(min-width: 1024px) 20vw, (min-width: 768px) 25vw, (min-width: 640px) 33vw, 50vw"
+                  />
+                  <TrailerHover mediaType={item.media_type} id={item.id} title={item.title} />
                   <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
-                    ★ {item.vote_average.toFixed(1)}
+                    ★ {item.vote_average?.toFixed(1)}
                   </div>
                   {item.media_type === 'tv' && (
                     <div className="absolute top-2 left-2 bg-accent text-black text-[9px] font-bold px-1.5 py-0.5 rounded-md">TV</div>

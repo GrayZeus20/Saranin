@@ -10,10 +10,12 @@ interface WatchButtonProps {
   entry: Omit<WatchlistEntry, 'addedAt'>
   /** overlay = round badge for a poster corner; inline = labelled pill */
   variant?: 'overlay' | 'inline'
+  /** overlay only: tighter inset + 28px badge for small poster cards */
+  compact?: boolean
   className?: string
 }
 
-export function WatchButton({ entry, variant = 'overlay', className = '' }: WatchButtonProps) {
+export function WatchButton({ entry, variant = 'overlay', compact = false, className = '' }: WatchButtonProps) {
   const { has, toggle } = useWatchlist()
   const saved = has(entry.media_type, entry.id)
 
@@ -59,6 +61,14 @@ export function WatchButton({ entry, variant = 'overlay', className = '' }: Watc
     )
   }
 
+  // Sizing is decided HERE, not by callers appending overrides. Tailwind v4
+  // dropped the v3 leading-`!` important prefix (`!w-7` emits no CSS at all),
+  // so the callers' `!bottom-1.5 !right-1.5 !w-7 !h-7` did nothing and every
+  // rail/grid card carried the full-size badge.
+  const sizing = compact
+    ? 'bottom-1.5 right-1.5 w-7 h-7'
+    : 'bottom-2 right-2 w-8 h-8'
+
   return (
     <button
       type="button"
@@ -66,7 +76,7 @@ export function WatchButton({ entry, variant = 'overlay', className = '' }: Watc
       aria-pressed={saved}
       aria-label={label}
       title={label}
-      className={`absolute bottom-2 right-2 z-10 w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm transition-all active:scale-90 ${
+      className={`absolute z-10 rounded-full flex items-center justify-center backdrop-blur-sm transition-all active:scale-90 ${sizing} ${
         saved ? 'bg-accent text-black' : 'bg-black/60 text-white hover:bg-black/80'
       } ${className}`}
     >

@@ -10,6 +10,9 @@ const SHELL_CACHE = 'saranin-shell-v1'
 const IMG_CACHE = 'saranin-img-v1'
 const SHELL_ASSETS = ['/', '/favicon.svg', '/site.webmanifest']
 const IMG_CACHE_LIMIT = 120
+// Hashed assets accumulate one entry per deploy in the shell cache — the image
+// trim does not touch them, so a stale build's chunks were never evicted.
+const SHELL_ASSET_LIMIT = 60
 
 self.addEventListener('install', (event) => {
   // allSettled: one missing icon must not abort the whole install.
@@ -38,6 +41,16 @@ async function trimImageCache() {
   // Cache.keys() is insertion-ordered, so the head holds the oldest posters.
   const excess = keys.length - IMG_CACHE_LIMIT
   for (let i = 0; i < excess; i++) await cache.delete(keys[i])
+}
+
+// Same policy for hashed build assets. Only /assets/* entries are counted: '/'
+// and the icons are put() on every navigation and must never be evicted.
+async function trimShellAssets() {
+  const cache = await caches.open(SHELL_CACHE)
+  const keys = await cache.keys()
+  const assets = keys.filter((req) => new URL(req.url).pathname.startsWith('/assets/'))
+  const excess = assets.length - SHELL_ASSET_LIMIT
+  for (let i = 0; i < excess; i++) await cache.delete(assets[i])
 }
 
 self.addEventListener('fetch', (event) => {
@@ -70,7 +83,7 @@ self.addEventListener('fetch', (event) => {
         return fetch(request).then((response) => {
           if (response.ok) {
             const copy = response.clone()
-            event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy)))
+            event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy)).then(trimShellAssets))
           }
           return response
         })

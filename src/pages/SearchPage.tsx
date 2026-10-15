@@ -9,6 +9,8 @@ import { WatchButton } from '../components/WatchButton'
 import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
 import { formatDate, GENRE_MAP } from '../utils/constants'
 import { normalizeMovie, normalizeTv, type Movie } from '../utils/tmdb'
+import { useLocale } from '../utils/locale'
+import { useSearchHistory } from '../utils/searchHistory'
 import { useDocumentTitle } from '../utils/useDocumentTitle'
 
 type SearchType = 'all' | 'movie' | 'tv' | 'anime'
@@ -21,7 +23,7 @@ interface MultiSearchResponse {
 
 const TMDB_MAX_PAGE = 500
 
-const TRENDING_SEARCHES = ['One Piece', 'Demon Slayer', 'Naruto', 'Dragon Ball', 'Jujutsu Kaisen', 'Attack at Titan', 'Dune', 'Oppenheimer']
+const TRENDING_SEARCHES = ['One Piece', 'Demon Slayer', 'Naruto', 'Dragon Ball', 'Jujutsu Kaisen', 'Attack on Titan', 'Dune', 'Oppenheimer']
 
 function isAnime(m: Movie): boolean {
   return !!m.genre_ids?.includes(16) && m.original_language === 'ja'
@@ -54,20 +56,28 @@ export default function SearchPage() {
   const [input, setInput] = useState(q)
   const [type, setType] = useState<SearchType>('all')
   const inputRef = useRef<HTMLInputElement>(null)
+  const { locale } = useLocale()
+  const { items: recentSearches, add: addRecentSearch, remove: removeRecentSearch, clear: clearRecentSearches } = useSearchHistory()
 
   useDocumentTitle(q ? `Search: ${q} — SARANIN.` : 'Search — SARANIN.')
 
   // URL is the source of truth for the query; keep the box in sync on back/forward.
   useEffect(() => { setInput(q) }, [q])
 
+  // A URL with a real query is a committed search — record it. Dedupe/cap live
+  // in the store, so react-router date navigation cannot balloon the list.
+  useEffect(() => {
+    if (q.length >= 2) addRecentSearch(q)
+  }, [q, addRecentSearch])
+
   // New page must land at the top of the results, not mid-scroll.
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, [urlPage, q])
 
   const searchQuery = useQuery({
-    queryKey: ['search', q, urlPage],
+    queryKey: ['search', q, urlPage, locale],
     queryFn: async () => {
       const data = await fetchWithRateLimit<MultiSearchResponse>(
-        `/search/multi?query=${encodeURIComponent(q)}&language=en-US&include_adult=false&page=${urlPage}`
+        `/search/multi?query=${encodeURIComponent(q)}&language=${locale}&include_adult=false&page=${urlPage}`
       )
       const items = normalizeMulti(data.results || [])
       const totalPages = Math.max(1, Math.min(TMDB_MAX_PAGE, data.total_pages || 1))
@@ -147,20 +157,57 @@ export default function SearchPage() {
             </button>
           </form>
 
-          {/* Trending chips when idle */}
+          {/* Recent + trending chips when idle */}
           {!hasQuery && (
-            <div className="mt-6">
-              <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Trending Searches</p>
-              <div className="flex flex-wrap gap-2">
-                {TRENDING_SEARCHES.map(term => (
-                  <button
-                    key={term}
-                    onClick={() => { setInput(term); submit(term) }}
-                    className="text-xs font-medium px-4 py-2 rounded-full bg-surface-elevated text-text-muted border border-zinc-800 hover:border-accent hover:text-accent transition-all active:scale-95"
-                  >
-                    {term}
-                  </button>
-                ))}
+            <div className="mt-6 space-y-5">
+              {recentSearches.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold">Recent</p>
+                    <button
+                      type="button"
+                      onClick={clearRecentSearches}
+                      className="text-text-muted text-[10px] font-bold hover:text-red-400 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {recentSearches.map(term => (
+                      <span key={term} className="inline-flex items-center rounded-full bg-surface-elevated border border-zinc-800 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => { setInput(term); submit(term) }}
+                          className="text-xs font-medium pl-4 pr-1.5 py-2 text-text-muted hover:text-accent transition-colors active:scale-95"
+                        >
+                          {term}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeRecentSearch(term)}
+                          aria-label={`Remove "${term}" from recent searches`}
+                          className="text-text-muted/70 hover:text-red-400 text-[10px] leading-none pl-0.5 pr-3 py-2 transition-colors"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Trending Searches</p>
+                <div className="flex flex-wrap gap-2">
+                  {TRENDING_SEARCHES.map(term => (
+                    <button
+                      key={term}
+                      onClick={() => { setInput(term); submit(term) }}
+                      className="text-xs font-medium px-4 py-2 rounded-full bg-surface-elevated text-text-muted border border-zinc-800 hover:border-accent hover:text-accent transition-all active:scale-95"
+                    >
+                      {term}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -253,7 +300,7 @@ export default function SearchPage() {
                     className="cursor-pointer"
                   >
                     <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
-                      <ImageWithFallback src={m.poster_path ? `${IMG_BASE}/w500${m.poster_path}` : ''} alt={m.title} className="w-full h-full object-cover" />
+                      <ImageWithFallback src={m.poster_path ? `${IMG_BASE}/w342${m.poster_path}` : ''} alt={m.title} className="w-full h-full object-cover" sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
                       <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
                         &#9733; {m.vote_average?.toFixed(1)}
@@ -262,10 +309,10 @@ export default function SearchPage() {
                         <div className="absolute top-2 left-2 bg-accent text-black text-[9px] font-bold px-1.5 py-0.5 rounded-md">TV</div>
                       )}
                       {isAnime(m) && (
-                        <div className={`absolute top-2 left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md ${m.media_type === 'tv' ? 'top-8' : ''}`}>Anime</div>
+                        <div className={`${m.media_type === 'tv' ? 'top-[26px]' : 'top-2'} absolute left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md`}>Anime</div>
                       )}
                       <WatchButton
-                        className="!bottom-1.5 !right-1.5 !w-7 !h-7"
+                        compact
                         entry={{ id: m.id, media_type: m.media_type === 'tv' ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
                       />
                       <div className="absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/90 to-transparent">

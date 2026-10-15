@@ -3,11 +3,14 @@ import { useParams, Link, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
 import Navbar from '../components/Navbar'
 import ScrollRow from '../components/ScrollRow'
+import { ImageWithFallback } from '../components/ImageWithFallback'
+import { TrailerHover } from '../components/TrailerHover'
 import { WatchButton } from '../components/WatchButton'
 import Footer from '../components/Footer'
 import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
 import { GENRE_MAP, REGION_MAP, formatDate } from '../utils/constants'
 import { useRegion } from '../utils/region'
+import { useLocale } from '../utils/locale'
 import { useDocumentTitle } from '../utils/useDocumentTitle'
 
 interface WatchProvider {
@@ -55,9 +58,18 @@ interface MovieDetail extends Movie {
   }
   videos: { results: Video[] }
   similar: { results: Movie[] }
+  recommendations: { results: Movie[] }
   // The API returns the key verbatim as "watch/providers"; the cast is here
-  // only so `detail['watch/providers']` below type-checks.
-  'watch/providers'?: { results: Record<string, { flatrate?: WatchProvider[]; rent?: WatchProvider[]; buy?: WatchProvider[] }> }
+  // only so `detail['watch/providers']` below type-checks. `link` is TMDB's
+  // per-region JustWatch page — the deep-link target for every provider pill.
+  'watch/providers'?: {
+    results: Record<string, {
+      link?: string
+      flatrate?: WatchProvider[]
+      rent?: WatchProvider[]
+      buy?: WatchProvider[]
+    }>
+  }
 }
 
 function formatRuntime(min: number | null): string {
@@ -74,6 +86,44 @@ function formatMoney(n: number): string {
   return `$${n.toLocaleString()}`
 }
 
+// A provider pill. TMDB ships a per-region JustWatch page (`results[region].link`)
+// — when present the pill becomes a real anchor straight to that country's
+// watch options; without it the pill stays a plain badge. One renderer for the
+// main "Available in" row and the per-country rows below.
+function ProviderPill({ provider, link, small = false }: {
+  provider: WatchProvider
+  link?: string
+  small?: boolean
+}) {
+  const cls = `flex items-center gap-1.5 bg-white rounded-lg ${small ? 'px-3 py-1.5' : 'px-3 py-2'}`
+  const inner = (
+    <>
+      {provider.logo_path && (
+        <img
+          src={`${IMG_BASE}/w92${provider.logo_path}`}
+          alt={provider.provider_name}
+          onError={(e) => { e.currentTarget.style.display = 'none' }}
+          className={`${small ? 'w-5 h-5' : 'w-6 h-6'} rounded-md object-cover`}
+          loading="lazy"
+        />
+      )}
+      <span className="text-black text-[11px] font-bold">{provider.provider_name}</span>
+    </>
+  )
+  if (!link) return <div className={cls}>{inner}</div>
+  return (
+    <a
+      href={link}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`Where to watch on ${provider.provider_name}`}
+      className={`${cls} hover:ring-2 hover:ring-accent hover:scale-105 transition-all active:scale-95`}
+    >
+      {inner}
+    </a>
+  )
+}
+
 export default function MovieDetailPage() {
   const { id } = useParams<{ id: string }>()
   const location = useLocation()
@@ -84,6 +134,7 @@ export default function MovieDetailPage() {
   // the whole player on a phone connection before anyone asked for it.
   const [trailerPlaying, setTrailerPlaying] = useState(false)
   const { region } = useRegion()
+  const { locale } = useLocale()
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Title is set once the payload resolves; the hook ignores the empty string.
@@ -98,8 +149,9 @@ export default function MovieDetailPage() {
     // `watch/providers` must be part of append_to_response — the two
     // "Available in …" sections read `detail['watch/providers']`, and without
     // this the key never existed, so both sections were dead on every title.
+    // `recommendations` rides along for the "More Like This" rail.
     fetchWithRateLimit<any>(
-      `/${endpoint}/${id}?append_to_response=credits,videos,similar,watch%2Fproviders&language=en-US`,
+      `/${endpoint}/${id}?append_to_response=credits,videos,similar,recommendations,watch%2Fproviders&language=${locale}`,
       { signal: controller.signal }
     )
       .then(data => {
@@ -114,12 +166,17 @@ export default function MovieDetailPage() {
       })
       .catch(() => { if (!controller.signal.aborted) { setDetail(null); setLoading(false) } })
     return () => controller.abort()
-  }, [id, isTv])
+  }, [id, isTv, locale])
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [])
+
+  // Clicking a similar title swaps the payload under the same mounted shell; the
+  // inner scroller kept its old offset, dropping the user mid-page on the new
+  // title. Reset it whenever the title changes (after the loaded tree mounts).
+  useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }) }, [id, loading])
 
   if (loading) {
     return (
@@ -177,10 +234,20 @@ export default function MovieDetailPage() {
 
   const director = detail.credits?.crew?.find(c => c.job === 'Director')?.name
 
-  const detailProviders = detail['watch/providers']?.results?.[region]
-    || detail['watch/providers']?.results?.ID
-    || detail['watch/providers']?.results?.US
-    || {}
+  // Whose streaming data is on screen? The user's region when TMDB has it;
+  // otherwise the ID/US fallback. The heading must follow the DATA actually
+  // shown — the old version always printed the user's region, so a Netflix-US
+  // row appeared under "Available in 🇮🇩 Indonesia" for anyone outside the
+  // fallback country.
+  const providerResults = detail['watch/providers']?.results || {}
+  const hasProviderData = (code: string) => {
+    const entry = providerResults[code]
+    return !!entry && !!(entry.flatrate?.length || entry.rent?.length || entry.buy?.length)
+  }
+  const providerRegionCode = [region, 'ID', 'US'].find(hasProviderData) || region
+  const detailProviders = providerResults[providerRegionCode] || {}
+  // TMDB hands out a per-region JustWatch page — every provider pill links there.
+  const detailWatchLink = detailProviders.link
   const flatrateProviders = detailProviders.flatrate || []
   const rentProviders = detailProviders.rent || []
   const buyProviders = detailProviders.buy || []
@@ -192,15 +259,27 @@ export default function MovieDetailPage() {
   const allRegionResults = detail['watch/providers']?.results || {}
   const availableRegions = Object.entries(allRegionResults)
     .filter(([, data]) => data.flatrate?.length || data.rent?.length || data.buy?.length)
-    .map(([code, data]) => ({
-      code,
-      name: REGION_MAP[code]?.name || code,
-      flag: REGION_MAP[code]?.flag || '🌍',
-      providers: [...(data.flatrate || []), ...(data.rent || []), ...(data.buy || [])],
-    }))
+    .map(([code, data]) => {
+      // A provider often appears in more than one bucket (flatrate + rent), and
+      // the old concat rendered it twice under the same React key.
+      const merged = [...(data.flatrate || []), ...(data.rent || []), ...(data.buy || [])]
+      return {
+        code,
+        name: REGION_MAP[code]?.name || code,
+        flag: REGION_MAP[code]?.flag || '🌍',
+        link: data.link,
+        providers: [...new Map(merged.map(p => [p.provider_id, p])).values()],
+      }
+    })
 
   const cast = detail.credits?.cast?.slice(0, 10) || []
   const similar = detail.similar?.results?.slice(0, 20) || []
+  // Recommendations, minus anything already shown in the similar rail and minus
+  // the title itself. TMDB's two rails overlap heavily; one screen, no repeats.
+  const similarIds = new Set(similar.map(m => m.id))
+  const recommendations = (detail.recommendations?.results || [])
+    .filter(m => m.id !== detail.id && !similarIds.has(m.id))
+    .slice(0, 20)
 
   return (
     <div className="fixed inset-0 z-50 bg-surface">
@@ -215,13 +294,19 @@ export default function MovieDetailPage() {
           className="relative h-[40vh] sm:h-[50vh] md:h-[60vh]"
         >
           {movie.backdrop_path ? (
-            <img
-              src={`${IMG_BASE}/w1280${movie.backdrop_path}`}
-              alt={movie.title}
-              fetchPriority="high"
-              decoding="async"
-              className="w-full h-full object-cover"
-            />
+            <>
+              <img
+                src={`${IMG_BASE}/w1280${movie.backdrop_path}`}
+                alt={movie.title}
+                fetchPriority="high"
+                decoding="async"
+                onError={(e) => { e.currentTarget.style.display = 'none' }}
+                className="w-full h-full object-cover"
+              />
+              {/* Hover preview on the hero itself — same lazy, muted embed as
+                  every card. Chrome (gradients below) paints over it. */}
+              <TrailerHover mediaType={isTv ? 'tv' : 'movie'} id={movie.id} title={movie.title} zoomClass="scale-[1.18]" />
+            </>
           ) : (
             <div className="w-full h-full bg-surface-card flex items-center justify-center text-zinc-700 text-4xl font-black">{movie.title}</div>
           )}
@@ -238,16 +323,18 @@ export default function MovieDetailPage() {
             transition={{ duration: 0.5 }}
             className="flex flex-col sm:flex-row gap-5 sm:gap-8 mb-8"
           >
-            <div className="shrink-0 w-36 sm:w-44 md:w-52 mx-auto sm:mx-0">
-              {movie.poster_path ? (
-                <img
-                  src={`${IMG_BASE}/w342${movie.poster_path}`}
+            <div className="relative shrink-0 w-36 sm:w-44 md:w-52 mx-auto sm:mx-0">
+              <div className="relative overflow-hidden rounded-xl shadow-2xl border border-zinc-800">
+                {/* One degrade path for every image: a failed poster shows its
+                    initial instead of the browser's broken-image glyph. */}
+                <ImageWithFallback
+                  src={movie.poster_path ? `${IMG_BASE}/w342${movie.poster_path}` : ''}
                   alt={movie.title}
-                  className="w-full aspect-[2/3] object-cover rounded-xl shadow-2xl border border-zinc-800"
+                  className="w-full aspect-[2/3] object-cover"
+                  fallbackText={movie.title?.charAt(0)}
+                  sizes="(min-width: 768px) 208px, (min-width: 640px) 176px, 144px"
                 />
-              ) : (
-                <div className="w-full aspect-[2/3] bg-surface-card rounded-xl flex items-center justify-center text-zinc-700 text-lg font-bold">{movie.title?.charAt(0)}</div>
-              )}
+              </div>
               <WatchButton
                 variant="inline"
                 className="mt-3 w-full justify-center"
@@ -276,16 +363,21 @@ export default function MovieDetailPage() {
               {uniqueProviders.length > 0 && (
                 <div className="mb-5">
                   <h3 className="text-[10px] uppercase tracking-widest font-bold text-text-muted mb-2">
-                    Available in {REGION_MAP[region]?.flag || '🌍'} {REGION_MAP[region]?.name || region}
+                    Available in {REGION_MAP[providerRegionCode]?.flag || '🌍'} {REGION_MAP[providerRegionCode]?.name || providerRegionCode}
+                    {providerRegionCode !== region && (
+                      <span className="normal-case tracking-normal font-medium text-text-muted/80"> — no {region} data for this title</span>
+                    )}
                   </h3>
                   <div className="flex flex-wrap gap-2">
                     {uniqueProviders.map(p => (
-                      <div key={p.provider_id} className="flex items-center gap-1.5 bg-white rounded-lg px-3 py-2">
-                        <img src={`${IMG_BASE}/w92${p.logo_path}`} alt={p.provider_name} className="w-6 h-6 rounded-md object-cover" loading="lazy" />
-                        <span className="text-black text-[11px] font-bold">{p.provider_name}</span>
-                      </div>
+                      <ProviderPill key={p.provider_id} provider={p} link={detailWatchLink} />
                     ))}
                   </div>
+                  {detailWatchLink && (
+                    <p className="text-text-muted text-[10px] mt-2">
+                      Tapping a service opens its JustWatch page for this region.
+                    </p>
+                  )}
                 </div>
               )}
               {detail.budget > 0 && (
@@ -334,6 +426,7 @@ export default function MovieDetailPage() {
                       <img
                         src={`${IMG_BASE}/w780${movie.backdrop_path}`}
                         alt=""
+                        onError={(e) => { e.currentTarget.style.display = 'none' }}
                         className="absolute inset-0 w-full h-full object-cover opacity-70 transition-opacity duration-300 group-hover/play:opacity-90"
                         loading="lazy"
                       />
@@ -364,12 +457,13 @@ export default function MovieDetailPage() {
                 {cast.map((c, i) => (
                   <motion.div key={c.id} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, delay: 0.1 + i * 0.05 }} className="shrink-0 w-20 sm:w-24 text-center">
                     <Link to={`/person/${c.id}`} className="block">
-                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden bg-surface-card border border-zinc-800 mx-auto mb-2 hover:border-accent transition-colors">
-                        {c.profile_path ? (
-                          <img src={`${IMG_BASE}/w185${c.profile_path}`} alt={c.name} className="w-full h-full object-cover" loading="lazy" draggable={false} />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-zinc-700 text-lg font-bold">{c.name.charAt(0)}</div>
-                        )}
+                      <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden bg-surface-card border border-zinc-800 mx-auto mb-2 hover:border-accent transition-colors">
+                        <ImageWithFallback
+                          src={c.profile_path ? `${IMG_BASE}/w185${c.profile_path}` : ''}
+                          alt={c.name}
+                          className="w-full h-full object-cover"
+                          sizes="(min-width: 640px) 96px, 80px"
+                        />
                       </div>
                       <p className="text-text-primary text-[11px] font-bold line-clamp-1 hover:text-accent transition-colors">{c.name}</p>
                       <p className="text-text-muted text-[9px] line-clamp-1">{c.character}</p>
@@ -390,19 +484,26 @@ export default function MovieDetailPage() {
             >
               <h3 className="text-[10px] uppercase tracking-widest font-bold text-text-muted mb-4">Available In These Countries</h3>
               <div className="space-y-4">
-                {availableRegions.slice(0, 8).map(({ code, name, flag, providers }) => (
+                {availableRegions.slice(0, 8).map(({ code, name, flag, link, providers }) => (
                   <div key={code} className="bg-surface-elevated border border-zinc-800 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="text-lg">{flag}</span>
                       <span className="text-text-primary text-sm font-bold">{name}</span>
                       <span className="text-text-muted text-[10px]">({code})</span>
+                      {link && (
+                        <a
+                          href={link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-auto text-accent text-[10px] font-bold hover:text-white transition-colors"
+                        >
+                          Check availability →
+                        </a>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {providers.map(p => (
-                        <div key={p.provider_id} className="flex items-center gap-1.5 bg-white rounded-lg px-3 py-2">
-                          <img src={`${IMG_BASE}/w92${p.logo_path}`} alt={p.provider_name} className="w-5 h-5 rounded-md object-cover" loading="lazy" />
-                          <span className="text-black text-[11px] font-bold">{p.provider_name}</span>
-                        </div>
+                        <ProviderPill key={p.provider_id} provider={p} link={link} small />
                       ))}
                     </div>
                   </div>
@@ -430,16 +531,16 @@ export default function MovieDetailPage() {
                     to={`/company/${c.id}`}
                     className="flex items-center gap-2.5 bg-white rounded-xl px-4 py-3 shadow-sm hover:shadow-md hover:scale-105 transition-all"
                   >
-                    {c.logo_path ? (
-                      <img src={`${IMG_BASE}/w154${c.logo_path}`} alt={c.name} className="h-8 w-auto object-contain" loading="lazy"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; const fb = e.currentTarget.nextElementSibling as HTMLElement; if(fb) fb.style.display='flex' }}
-                      />
-                    ) : null}
-                    <div className={`w-8 h-8 rounded-lg bg-zinc-200 items-center justify-center ${c.logo_path ? 'hidden' : 'flex'}`}
-                      style={c.logo_path ? { display: 'none' } : undefined}
-                    >
-                      <span className="text-zinc-500 text-sm font-black">{c.name.charAt(0)}</span>
-                    </div>
+                    {/* Same degrade path as every other image: the old version hid
+                        a failed logo imperatively via style.display and dug its
+                        fallback out with nextElementSibling. */}
+                    <ImageWithFallback
+                      src={c.logo_path ? `${IMG_BASE}/w154${c.logo_path}` : ''}
+                      alt={c.name}
+                      className="h-8 w-auto object-contain"
+                      fallbackText={c.name.charAt(0)}
+                      sizes="(min-width: 1024px) 160px, 120px"
+                    />
                   </Link>
                 ))}
               </div>
@@ -472,17 +573,70 @@ export default function MovieDetailPage() {
                       className="block w-28 sm:w-32 cursor-pointer"
                     >
                       <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
-                        {m.poster_path ? (
-                          <img src={`${IMG_BASE}/w342${m.poster_path}`} alt={m.title} className="w-full h-full object-cover transition-transform duration-300 hover:scale-105" loading="lazy" draggable={false} />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-zinc-700 text-sm font-bold">{m.title?.charAt(0)}</div>
-                        )}
+                        <ImageWithFallback
+                          src={m.poster_path ? `${IMG_BASE}/w342${m.poster_path}` : ''}
+                          alt={m.title}
+                          className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                          sizes="(min-width: 640px) 128px, 112px"
+                        />
+                        {/* Hover preview on similar/recommendation cards too. */}
+                        <TrailerHover mediaType={isTv ? 'tv' : 'movie'} id={m.id} title={m.title} />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
                         <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1 py-0.5 rounded">
                           ★ {m.vote_average?.toFixed(1)}
                         </div>
                         <WatchButton
-                          className="!bottom-1.5 !right-1.5 !w-7 !h-7"
+                          compact
+                          entry={{ id: m.id, media_type: isTv ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
+                        />
+                      </div>
+                      <p className="text-text-primary text-[11px] font-bold line-clamp-1 mt-1.5">{m.title}</p>
+                    </Link>
+                  </motion.div>
+                ))}
+              </ScrollRow>
+            </motion.div>
+          )}
+          {/* Recommendations — "More Like This". Rendered after Similar; the
+              list already excludes everything in that rail and this title. */}
+          {recommendations.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.35 }}
+              className="mb-10"
+            >
+              <h3 className="text-[10px] uppercase tracking-widest font-bold text-text-muted mb-4">More Like This</h3>
+              <ScrollRow label="More like this" className="-mx-1">
+                {recommendations.map((m, i) => (
+                  <motion.div
+                    key={m.id}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.1 + i * 0.04 }}
+                    className="shrink-0"
+                  >
+                    <Link
+                      to={`/${isTv ? 'tv' : 'movie'}/${m.id}`}
+                      onClick={() => scrollRef.current?.scrollTo({ top: 0 })}
+                      className="block w-28 sm:w-32 cursor-pointer"
+                    >
+                      <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
+                        <ImageWithFallback
+                          src={m.poster_path ? `${IMG_BASE}/w342${m.poster_path}` : ''}
+                          alt={m.title}
+                          className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                          sizes="(min-width: 640px) 128px, 112px"
+                        />
+                        <TrailerHover mediaType={isTv ? 'tv' : 'movie'} id={m.id} title={m.title} />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+                        <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1 py-0.5 rounded">
+                          ★ {m.vote_average?.toFixed(1)}
+                        </div>
+                        <WatchButton
+                          compact
                           entry={{ id: m.id, media_type: isTv ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
                         />
                       </div>

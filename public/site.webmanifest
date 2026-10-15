@@ -8,6 +8,34 @@
   "background_color": "#0a0a0a",
   "theme_color": "#0a0a0a",
   "orientation": "portrait-primary",
+  "shortcuts": [
+    {
+      "name": "My Watchlist",
+      "short_name": "Watchlist",
+      "description": "Your saved titles, available offline",
+      "url": "/watchlist",
+      "icons": [
+        {
+          "src": "/favicon.svg",
+          "type": "image/svg+xml",
+          "sizes": "any"
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "short_name": "Search",
+      "description": "Search movies, TV shows and anime",
+      "url": "/search",
+      "icons": [
+        {
+          "src": "/favicon.svg",
+          "type": "image/svg+xml",
+          "sizes": "any"
+        }
+      ]
+    }
+  ],
   "icons": [
     {
       "src": "/favicon.svg",

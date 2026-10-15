@@ -41,9 +41,16 @@ export function normalizeMovie(movie: any): Movie {
   }
 }
 
+// TMDB movie and tv ids are separate namespaces — a bare-id dedupe silently
+// dropped every TV show whose id collided with a movie's (common: ~1 per page),
+// so combined grids showed fewer titles than TMDB returned.
+function dedupeKey(m: Pick<Movie, 'id' | 'media_type'>): string {
+  return `${m.media_type ?? 'movie'}-${m.id}`
+}
+
 export function dedupById(prev: Movie[], next: Movie[]): Movie[] {
-  const ids = new Set(prev.map(m => m.id))
-  return [...prev, ...next.filter(m => !ids.has(m.id))]
+  const keys = new Set(prev.map(dedupeKey))
+  return [...prev, ...next.filter(m => !keys.has(dedupeKey(m)))]
 }
 
 // media_type-agnostic movie/tv router — required for search results,
