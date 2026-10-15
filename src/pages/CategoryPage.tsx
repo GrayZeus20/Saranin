@@ -205,7 +205,7 @@ export default function CategoryPage() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => setActiveGenres([])}
-                    className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                    className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                       activeGenres.length === 0
                         ? 'bg-accent text-black'
                         : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
@@ -217,7 +217,7 @@ export default function CategoryPage() {
                     <button
                       key={g.id}
                       onClick={() => setActiveGenres(prev => prev.includes(g.id) ? prev.filter(id => id !== g.id) : [...prev, g.id])}
-                      className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                      className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                         activeGenres.includes(g.id)
                           ? 'bg-accent text-black'
                           : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
@@ -238,7 +238,7 @@ export default function CategoryPage() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => selectPlatform(null)}
-                    className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                    className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                       activePlatform === null
                         ? 'bg-accent text-black'
                         : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
@@ -250,7 +250,7 @@ export default function CategoryPage() {
                     <button
                       key={p.provider_id}
                       onClick={() => selectPlatform(p.provider_id)}
-                      className={`shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                      className={`shrink-0 flex items-center gap-1.5 min-h-[44px] text-xs font-medium px-3 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                         activePlatform === p.provider_id
                           ? 'bg-accent text-black'
                           : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
@@ -286,7 +286,7 @@ export default function CategoryPage() {
                     <button
                       key={t.key}
                       onClick={() => setContentType(t.key)}
-                      className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                      className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                         contentType === t.key
                           ? 'bg-accent text-black'
                           : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'

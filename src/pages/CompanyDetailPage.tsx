@@ -235,7 +235,9 @@ export default function CompanyDetailPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
           {[...movies, ...tvShows].map((item, i) => (
             <motion.div
-              key={item.id}
+              // movie and tv ids are independent TMDB namespaces and overlap
+              // constantly — the bare id collided across the two kind lists.
+              key={`${item.media_type}-${item.id}`}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: i * 0.05 }}

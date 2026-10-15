@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { toast } from 'sonner'
 import { ImageWithFallback } from './components/ImageWithFallback'
 import Navbar from './components/Navbar'
+import ScrollRow from './components/ScrollRow'
 import { fetchWithRateLimit, IMG_BASE, TMDB_TOKEN } from './utils/api'
 import { formatDate, GENRE_MAP } from './utils/constants'
 import { normalizeMovie, normalizeTv, dedupById, type Movie } from './utils/tmdb'
@@ -89,42 +90,32 @@ function SkeletonHero() {
   )
 }
 
-function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink }: {
-  title: string; subtitle: string; movies: Movie[]; onMovieClick: (m: Movie) => void; viewAllLink?: string
-}) {
-  const scrollRef = useRef<HTMLDivElement>(null)
-  if (movies.length === 0) {
-    // Show skeleton instead of disappearing — prevents layout shift
-    return (
-      <div className="mb-10 md:mb-14">
-        <div className="flex items-baseline gap-3 mb-4">
-          <div className="skeleton h-5 w-24 rounded" />
-          <div className="skeleton h-3 w-16 rounded" />
+function RowSkeleton() {
+  return (
+    <div className="flex gap-3 overflow-hidden">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="shrink-0 w-28 sm:w-32 md:w-36">
+          <div className="skeleton w-full aspect-[2/3] rounded-xl" />
+          <div className="skeleton h-3 w-3/4 rounded mt-1.5" />
         </div>
-        <div className="flex gap-3 overflow-hidden">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="shrink-0 w-28 sm:w-32 md:w-36">
-              <div className="skeleton w-full aspect-[2/3] rounded-xl" />
-              <div className="skeleton h-3 w-3/4 rounded mt-1.5" />
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
+      ))}
+    </div>
+  )
+}
 
-  const scroll = (direction: 'left' | 'right') => {
-    if (scrollRef.current) {
-      const scrollAmount = scrollRef.current.clientWidth * 0.8
-      scrollRef.current.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth'
-      })
-    }
-  }
+function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink, isError, onRetry }: {
+  title: string
+  subtitle: string
+  movies: Movie[]
+  onMovieClick: (m: Movie) => void
+  viewAllLink?: string
+  isError?: boolean
+  onRetry?: () => void
+}) {
+  const isEmpty = movies.length === 0
 
   return (
-    <div className="mb-10 md:mb-14 relative group">
+    <div className="mb-10 md:mb-14">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-baseline gap-3">
           <h2 className="text-lg sm:text-xl font-bold text-text-primary">{title}</h2>
@@ -138,36 +129,39 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink 
         )}
       </div>
 
-      <button
-        onClick={() => scroll('left')}
-        aria-label={`Scroll ${title} left`}
-        className="absolute left-0 top-1/2 -translate-y-1/2 z-20 bg-black/50 backdrop-blur-sm p-2 rounded-r-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-black/70 hover:scale-110 active:scale-95"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-      </button>
-
-      <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-4 -mx-1 px-1 scrollbar-hide">
-        {movies.map(m => (
-          <div key={`${title}-${m.id}`} onClick={() => onMovieClick(m)} className="shrink-0 w-28 sm:w-32 md:w-36 cursor-pointer group transition-transform duration-200 hover:scale-105 active:scale-95">
-            <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
-              <ImageWithFallback src={posterUrl(m.poster_path)} alt={m.title} className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1.5 py-0.5 rounded">
-                &#9733; {m.vote_average?.toFixed(1)}
+      {/* A failed row used to shimmer forever — it looked like the page was
+          still loading. It now says so and offers a retry. */}
+      {isEmpty && isError ? (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-surface-elevated px-4 py-5">
+          <p className="text-text-muted text-xs">Couldn't load this row.</p>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="text-xs font-bold text-accent hover:text-white transition-colors"
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      ) : isEmpty ? (
+        // Skeleton while the row resolves — prevents layout shift.
+        <RowSkeleton />
+      ) : (
+        <ScrollRow label={title} className="-mx-1">
+          {movies.map(m => (
+            <div key={`${title}-${m.id}`} onClick={() => onMovieClick(m)} className="shrink-0 w-28 sm:w-32 md:w-36 cursor-pointer transition-transform duration-200 hover:scale-105 active:scale-95">
+              <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
+                <ImageWithFallback src={posterUrl(m.poster_path)} alt={m.title} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1.5 py-0.5 rounded">
+                  &#9733; {m.vote_average?.toFixed(1)}
+                </div>
               </div>
+              <p className="text-text-primary text-[11px] font-bold line-clamp-1 mt-1.5">{m.title}</p>
             </div>
-            <p className="text-text-primary text-[11px] font-bold line-clamp-1 mt-1.5">{m.title}</p>
-          </div>
-        ))}
-      </div>
-
-      <button
-        onClick={() => scroll('right')}
-        aria-label={`Scroll ${title} right`}
-        className="absolute right-0 top-1/2 -translate-y-1/2 z-20 bg-black/50 backdrop-blur-sm p-2 rounded-l-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-black/70 hover:scale-110 active:scale-95"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-      </button>
+          ))}
+        </ScrollRow>
+      )}
     </div>
   )
 }
@@ -435,13 +429,16 @@ export default function App() {
         {isFirstPage && (
           <>
             <div>
-              <HorizontalSection title="Trending" subtitle="What's hot this week" movies={trendingRowItems} onMovieClick={openDetail} viewAllLink="/category/trending" />
+              <HorizontalSection title="Trending" subtitle="What's hot this week" movies={trendingRowItems} onMovieClick={openDetail} viewAllLink="/category/trending"
+                isError={trendingRow.isError} onRetry={() => trendingRow.refetch()} />
             </div>
             <div>
-              <HorizontalSection title="Popular" subtitle="Most watched right now" movies={popularRowItems} onMovieClick={openDetail} viewAllLink="/category/popular" />
+              <HorizontalSection title="Popular" subtitle="Most watched right now" movies={popularRowItems} onMovieClick={openDetail} viewAllLink="/category/popular"
+                isError={popularRow.isError} onRetry={() => popularRow.refetch()} />
             </div>
             <div>
-              <HorizontalSection title="Top Rated" subtitle="Critics' picks" movies={topRatedRowItems} onMovieClick={openDetail} viewAllLink="/category/top_rated" />
+              <HorizontalSection title="Top Rated" subtitle="Critics' picks" movies={topRatedRowItems} onMovieClick={openDetail} viewAllLink="/category/top_rated"
+                isError={topRatedRow.isError} onRetry={() => topRatedRow.refetch()} />
             </div>
           </>
         )}
@@ -493,7 +490,7 @@ export default function App() {
                       <button
                         key={key}
                         onClick={() => toggleCategory(key)}
-                        className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                        className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                           activeCategory === key
                             ? 'bg-accent text-black'
                             : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
@@ -511,7 +508,7 @@ export default function App() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => setActiveGenres([])}
-                      className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                      className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                         activeGenres.length === 0
                           ? 'bg-accent text-black'
                           : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
@@ -523,7 +520,7 @@ export default function App() {
                       <button
                         key={g.id}
                         onClick={() => toggleGenre(g.id)}
-                        className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                        className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                           activeGenres.includes(g.id)
                             ? 'bg-accent text-black'
                             : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
@@ -546,7 +543,7 @@ export default function App() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => selectPlatform(null)}
-                      className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                      className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                         activePlatform === null
                           ? 'bg-accent text-black'
                           : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
@@ -558,7 +555,7 @@ export default function App() {
                       <button
                         key={p.provider_id}
                         onClick={() => selectPlatform(p.provider_id)}
-                        className={`shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                        className={`shrink-0 flex items-center gap-1.5 min-h-[44px] text-xs font-medium px-3 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                           activePlatform === p.provider_id
                             ? 'bg-accent text-black'
                             : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
@@ -594,7 +591,7 @@ export default function App() {
                       <button
                         key={t.key}
                         onClick={() => setContentType(t.key)}
-                        className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                        className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                           contentType === t.key
                             ? 'bg-accent text-black'
                             : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
