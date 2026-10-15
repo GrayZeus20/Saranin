@@ -126,7 +126,12 @@ async function throttledFetch<T>(url: string, options?: RequestInit): Promise<T>
 
   if (dedupeKey) {
     inflight.set(dedupeKey, run)
-    run.finally(() => inflight.delete(dedupeKey))
+    // `run.finally(...)` returns a *new* promise that rejects whenever `run`
+    // rejects — with no handler on it that surfaced as an unhandled rejection
+    // on every failed request. Handling both outcomes on the same promise
+    // clears the entry without spawning a second, unobserved one.
+    const cleanup = () => { inflight.delete(dedupeKey) }
+    run.then(cleanup, cleanup)
   }
   return run
 }

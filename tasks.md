@@ -1,5 +1,51 @@
 # Tasks
 
+## Mobile UX pass: drag-scroll rails + mobile hardening (2026-10-15)
+
+Request: "deepscan + bikin user friendly untuk mobile, scroll ke kanan bisa digeser dengan drag".
+Approved scope: A (drag rails) + B (mobile polish) + C (real bugs) + D (dead-code cleanup + README).
+
+Root cause of "gak bisa digeser": the row-aligned arrow buttons are `opacity-0` with no
+`pointer-events-none`, so on touch they are invisible but still capture every tap at both edges;
+no mouse drag, no snap, no edge affordance, no overscroll containment.
+
+Plan:
+- [x] 1. `src/components/ScrollRow.tsx` (new) — one drag-scroll rail: native touch pan untouched,
+       pointer drag for mouse/pen, drag-guard on click, persistent md+ arrows, edge fade,
+       snap on coarse pointers only, keyboard arrows, `overscroll-behavior-x: contain`
+- [x] 2. `src/index.css` — `.scroll-row` styles, `.safe-top`/`.safe-bottom`, reduced-motion block
+- [x] 3. `src/App.tsx` — `HorizontalSection` -> `ScrollRow`; row queries get a real error/empty
+       state instead of an endless skeleton
+- [x] 4. `src/pages/MovieDetailPage.tsx` — cast + similar -> `ScrollRow`; watch/providers actually
+       requested; trailer behind a click-to-play facade
+- [x] 5. `src/pages/CategoryPage.tsx`, `src/pages/SearchPage.tsx` — 44px pills; SearchPage "TV"
+       excludes anime so it matches App/CategoryPage
+- [x] 6. `src/pages/PersonDetailPage.tsx` — `also_known_as` guard; filmography reveals in pages
+- [x] 7. `src/pages/CompanyDetailPage.tsx` — media_type-aware React key
+- [x] 8. `src/components/Navbar.tsx` — sticky wrapper keeps mobile search bar under the nav;
+       desktop/mobile dropdown markup deduped
+- [x] 9. `src/utils/api.ts` — settle the dedupe map without an unhandled rejection
+- [x] 10. `src/main.tsx` — `MotionConfig reducedMotion="user"`
+- [x] 11. `index.html` / `public/site.webmanifest` — viewport-fit, manifest + icon links,
+       theme-color unified with `--color-surface`
+- [x] 12. `git rm` `src/Modal.tsx`, `functions/`, `public/index.php`, `public/.htaccess`
+- [x] 13. `README.md` — rewrite for the actual stack (React 18 + Vite + Cloudflare Pages)
+- [x] 14. Verify: tsc, build, Playwright 390x844 drag test, 0 console errors
+
+### Proof (2026-10-15)
+- `tsc --noEmit` → exit 0 (run via `.scratch/verify.config.js` tunnel: `[verify] tsc -> exit=0`)
+- `vite build` → 507 modules, built in 4.47s, exit 0
+- Headless-Chromium drag test, 390x844, real CDP mouse input, **9/9 checks**:
+  `dragMovedPx 180` (0→180), `dragSwallowedClick true`, `tapStillClicks true`,
+  `keyboardPagedPx 299`, `fitsNoOverflow true`, `fitsArrowsDisabled true`,
+  `cancelClearedDragState true`, `isDraggingClassCleared true`, `consoleErrors []`
+- Runnable: `npm run test:drag` (headless, no framework — `scripts/dragtest/`)
+
+### Not in this pass (needs a separate call)
+- Laravel shell still tracked: `app/`, `resources/`, `storage/`, `.github/workflows/ci.yml`
+  (its PHP job runs `composer install` with no `composer.json` -> always red), plus a 0-byte
+  `public/favicon.ico`.
+
 ## Platform filter on CategoryPage (2026-10-12)
 
 Request: "tambahkan filter platform seperti netflix, prime" on the category page.
@@ -138,3 +184,36 @@ Fix: real server-side platform filtering + a fixed "All" default.
 - Browser: Platform bar renders 40 providers, "All" active by default; Netflix -> discover
   `with_watch_providers=8`, grid swaps to Netflix catalog; Platform "All" -> grid resets to
   unfiltered Now Playing in 308ms; 0 console errors.
+
+## Cleanup pass: buang sisa + data testing (2026-10-15)
+
+Request: "hapus sisa yang tak terpakai dan data testing serta data example yang tidak digunakan".
+Tiap penghapusan diverifikasi dulu (grep/glob) tidak ada referensi dari `src/`.
+
+- [x] `app/`, `resources/`, `storage/` — shell Laravel; tidak di-import `src/` (mati sejak migrasi Vite/CF)
+- [x] `.inverse/` — konfigurasi pipeline agent; tool tidak terpasang (tanpa CLI/extension/`~/.inverse`)
+- [x] `public/favicon.ico` (0 byte, tak dirujuk — index.html pakai `favicon.svg`), `public/img/no-poster.svg`
+      (hanya dipakai blade yang dihapus)
+- [x] Orphan worktree `.claude/worktrees/agent-a3f07c715b162237f/` + `git worktree prune` +
+      branch `worktree-agent-…` (dihapus hanya bila sudah merged ke main)
+- [x] Data testing: `.playwright-mcp/`, `saranin-page.png`, `build.log`, `build-output.txt`, `.scratch/`
+- [x] `.github/workflows/ci.yml` — job PHP dihapus (selalu merah: `composer install` tanpa
+      `composer.json`); job Node `npm ci && npm run build` tetap
+- [x] `.editorconfig` / `.gitattributes` / `.gitignore` — aturan Laravel dibuang, duplikat dibersihkan
+- [x] `README.md` — URL clone benar (Saranin, bukan Movieflix), cara bikin `.env` (`.env.example`
+      tidak ada), dokumentasi `npm run test:drag`
+- [x] `git remote remove composer` — sisa laravel/laravel (re-add: `git remote add composer
+      https://github.com/laravel/laravel.git`)
+- [x] Verify: purge jalan → `tsc --noEmit` exit 0 + `vite build` hijau (bukti 0 referensi file terhapus)
+
+### Proof (2026-10-15)
+- Purge: `app/`, `resources/`, `storage/`, `.inverse/` (80 file staged `D`), `public/favicon.ico`,
+  `public/img/no-poster.svg` (dir ikut hilang), `build.log`, `build-output.txt`,
+  `saranin-page.png`, `.playwright-mcp/` — semua `gone` di existence check
+- Worktree: prune membersihkan registrasi + `git branch -d worktree-agent-a3f07c715b162237f`
+  (merged, tip `46845051`); `git worktree list` → cuma main; `git remote remove composer` →
+  tinggal `origin`
+- `[CLAIM] 0 referensi file terhapus — [PROOF] grep src/: `laravel|blade|artisan|composer|no-poster|favicon\.ico|inverse` → 0 hit`
+- `[CLAIM] tsc --noEmit — [PROOF]: [typecheck] tsc exit=0`
+- `[CLAIM] build hijau — [PROOF]: ✓ 507 modules transformed, built in 4.45s, exit 0`
+- `[CLAIM] worktree bersih — [PROOF]: git worktree list → C:/laragon/www/Saranin [main]`

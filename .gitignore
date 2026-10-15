@@ -3,8 +3,6 @@ dist
 .env
 .env.local
 .env.*.local
-.playwright
-.playwright-mcp
 
 # IDE
 .vscode
@@ -17,21 +15,26 @@ dist
 .DS_Store
 Thumbs.db
 
-# Debug
+# Logs & scan artifacts (not source)
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+build.log
+build-output.txt
+saranin-page.png
 
 # TypeScript
 *.tsbuildinfo
 
 # Vite
 *.local
-node_modules
-.env
+
+# Local tooling config (Claude Code)
 .claude/
 
-# Build/scan artifacts (not source)
-build.log
-build-output.txt
-saranin-page.png
+# Playwright
+.playwright
+.playwright-mcp
+
+# Scratch notes (temporary markdown)
+.scratch/

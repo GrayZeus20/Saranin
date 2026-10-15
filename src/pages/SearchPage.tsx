@@ -24,9 +24,13 @@ function isAnime(m: Movie): boolean {
   return !!m.genre_ids?.includes(16) && m.original_language === 'ja'
 }
 
+// Single source of truth for the Type filter, matching App/CategoryPage: "TV"
+// must NOT also list anime, or the same show lands under two filters and the
+// per-type counts disagree with the rest of the app.
 function matchesType(m: Movie, type: SearchType): boolean {
   if (type === 'all') return true
   if (type === 'anime') return isAnime(m)
+  if (type === 'tv') return m.media_type === 'tv' && !isAnime(m)
   return m.media_type === type
 }
 
@@ -77,10 +81,11 @@ export default function SearchPage() {
 
   const filtered = useMemo(() => items.filter(m => matchesType(m, type)), [items, type])
 
+  // Counts follow matchesType, so the badge on a filter equals what it shows.
   const typeCounts = useMemo(() => ({
     all: items.length,
-    movie: items.filter(m => m.media_type === 'movie').length,
-    tv: items.filter(m => m.media_type === 'tv').length,
+    movie: items.filter(m => matchesType(m, 'movie')).length,
+    tv: items.filter(m => matchesType(m, 'tv')).length,
     anime: items.filter(isAnime).length,
   }), [items])
 
@@ -183,7 +188,7 @@ export default function SearchPage() {
                   <button
                     key={t.key}
                     onClick={() => setType(t.key)}
-                    className={`shrink-0 text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                    className={`shrink-0 text-xs font-medium px-4 py-2.5 min-h-[44px] rounded-full transition-all duration-200 active:scale-95 ${
                       type === t.key
                         ? 'bg-accent text-black'
                         : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'

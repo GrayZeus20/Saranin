@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
 import Navbar from '../components/Navbar'
+import ScrollRow from '../components/ScrollRow'
 import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
 import { GENRE_MAP, REGION_MAP, formatDate } from '../utils/constants'
 
@@ -50,6 +51,8 @@ interface MovieDetail extends Movie {
   }
   videos: { results: Video[] }
   similar: { results: Movie[] }
+  // The API returns the key verbatim as "watch/providers"; the cast is here
+  // only so `detail['watch/providers']` below type-checks.
   'watch/providers'?: { results: Record<string, { flatrate?: WatchProvider[]; rent?: WatchProvider[]; buy?: WatchProvider[] }> }
 }
 
@@ -73,18 +76,23 @@ export default function MovieDetailPage() {
   const isTv = location.pathname.startsWith('/tv/')
   const [detail, setDetail] = useState<MovieDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  // The YouTube iframe is only mounted after a tap: an autoloaded embed pulls
+  // the whole player on a phone connection before anyone asked for it.
+  const [trailerPlaying, setTrailerPlaying] = useState(false)
   const region = 'ID'
   const scrollRef = useRef<HTMLDivElement>(null)
-  const castScrollRef = useRef<HTMLDivElement>(null)
-  const similarScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!id) return
     setLoading(true)
+    setTrailerPlaying(false)
     const controller = new AbortController()
     const endpoint = isTv ? 'tv' : 'movie'
+    // `watch/providers` must be part of append_to_response — the two
+    // "Available in …" sections read `detail['watch/providers']`, and without
+    // this the key never existed, so both sections were dead on every title.
     fetchWithRateLimit<any>(
-      `/${endpoint}/${id}?append_to_response=credits,videos,similar&language=en-US`,
+      `/${endpoint}/${id}?append_to_response=credits,videos,similar,watch%2Fproviders&language=en-US`,
       { signal: controller.signal }
     )
       .then(data => {
@@ -104,13 +112,6 @@ export default function MovieDetailPage() {
   useEffect(() => {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
-  }, [])
-
-  const scroll = useCallback((ref: React.RefObject<HTMLDivElement | null>, direction: 'left' | 'right') => {
-    if (ref.current) {
-      const scrollAmount = ref.current.clientWidth * 0.8
-      ref.current.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' })
-    }
   }, [])
 
   if (loading) {
@@ -292,13 +293,38 @@ export default function MovieDetailPage() {
             >
               <h3 className="text-[10px] uppercase tracking-widest font-bold text-text-muted mb-4">Trailer</h3>
               <div className="relative aspect-video w-full rounded-xl overflow-hidden border border-zinc-800 bg-black">
-                <iframe
-                  src={`https://www.youtube.com/embed/${trailer.key}`}
-                  title={`${movie.title} trailer`}
-                  className="absolute inset-0 w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
+                {trailerPlaying ? (
+                  <iframe
+                    src={`https://www.youtube.com/embed/${trailer.key}?autoplay=1`}
+                    title={`${movie.title} trailer`}
+                    className="absolute inset-0 w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setTrailerPlaying(true)}
+                    aria-label={`Play ${movie.title} trailer`}
+                    className="group/play absolute inset-0 w-full h-full"
+                  >
+                    {movie.backdrop_path && (
+                      <img
+                        src={`${IMG_BASE}/w780${movie.backdrop_path}`}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover opacity-70 transition-opacity duration-300 group-hover/play:opacity-90"
+                        loading="lazy"
+                      />
+                    )}
+                    <span className="relative z-10 flex items-center justify-center w-full h-full">
+                      <span className="w-16 h-16 rounded-full bg-accent text-black flex items-center justify-center shadow-2xl transition-transform duration-300 group-hover/play:scale-110 group-active/play:scale-95">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </span>
+                    </span>
+                  </button>
+                )}
               </div>
             </motion.div>
           )}
@@ -309,19 +335,16 @@ export default function MovieDetailPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.2 }}
-              className="mb-10 relative group"
+              className="mb-10"
             >
               <h3 className="text-[10px] uppercase tracking-widest font-bold text-text-muted mb-4">Cast</h3>
-              <button onClick={() => scroll(castScrollRef, 'left')} className="absolute left-0 top-1/2 -translate-y-1/2 z-20 bg-black/50 backdrop-blur-sm p-2 rounded-r-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-black/70 hover:scale-110 active:scale-95">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-              </button>
-              <div ref={castScrollRef} className="flex gap-3 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-hide">
+              <ScrollRow label="Cast" className="-mx-1">
                 {cast.map((c, i) => (
                   <motion.div key={c.id} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, delay: 0.1 + i * 0.05 }} className="shrink-0 w-20 sm:w-24 text-center">
                     <Link to={`/person/${c.id}`} className="block">
                       <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden bg-surface-card border border-zinc-800 mx-auto mb-2 hover:border-accent transition-colors">
                         {c.profile_path ? (
-                          <img src={`${IMG_BASE}/w185${c.profile_path}`} alt={c.name} className="w-full h-full object-cover" loading="lazy" />
+                          <img src={`${IMG_BASE}/w185${c.profile_path}`} alt={c.name} className="w-full h-full object-cover" loading="lazy" draggable={false} />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-zinc-700 text-lg font-bold">{c.name.charAt(0)}</div>
                         )}
@@ -331,10 +354,7 @@ export default function MovieDetailPage() {
                     </Link>
                   </motion.div>
                 ))}
-              </div>
-              <button onClick={() => scroll(castScrollRef, 'right')} className="absolute right-0 top-1/2 -translate-y-1/2 z-20 bg-black/50 backdrop-blur-sm p-2 rounded-l-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-black/70 hover:scale-110 active:scale-95">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-              </button>
+              </ScrollRow>
             </motion.div>
           )}
 
@@ -410,13 +430,10 @@ export default function MovieDetailPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.3 }}
-              className="mb-10 relative group"
+              className="mb-10"
             >
               <h3 className="text-[10px] uppercase tracking-widest font-bold text-text-muted mb-4">Similar {isTv ? 'TV Shows' : 'Movies'}</h3>
-              <button onClick={() => scroll(similarScrollRef, 'left')} className="absolute left-0 top-1/2 -translate-y-1/2 z-20 bg-black/50 backdrop-blur-sm p-2 rounded-r-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-black/70 hover:scale-110 active:scale-95">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-              </button>
-              <div ref={similarScrollRef} className="flex gap-3 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-hide">
+              <ScrollRow label={`Similar ${isTv ? 'TV shows' : 'movies'}`} className="-mx-1">
                 {similar.map((m, i) => (
                   <motion.div
                     key={m.id}
@@ -425,31 +442,29 @@ export default function MovieDetailPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, delay: 0.1 + i * 0.04 }}
+                    className="shrink-0"
                   >
                     <Link
                       to={`/${isTv ? 'tv' : 'movie'}/${m.id}`}
                       onClick={() => scrollRef.current?.scrollTo({ top: 0 })}
-                      className="block shrink-0 w-28 sm:w-32 cursor-pointer group/card"
+                      className="block w-28 sm:w-32 cursor-pointer"
                     >
                       <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
                         {m.poster_path ? (
-                          <img src={`${IMG_BASE}/w342${m.poster_path}`} alt={m.title} className="w-full h-full object-cover transition-transform duration-300 group-hover/card:scale-105" loading="lazy" />
+                          <img src={`${IMG_BASE}/w342${m.poster_path}`} alt={m.title} className="w-full h-full object-cover transition-transform duration-300 hover:scale-105" loading="lazy" draggable={false} />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-zinc-700 text-sm font-bold">{m.title?.charAt(0)}</div>
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
                         <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1 py-0.5 rounded">
                           ★ {m.vote_average?.toFixed(1)}
                         </div>
                       </div>
-                      <p className="text-text-primary text-[11px] font-bold line-clamp-1 mt-1.5 group-hover/card:text-accent transition-colors">{m.title}</p>
+                      <p className="text-text-primary text-[11px] font-bold line-clamp-1 mt-1.5">{m.title}</p>
                     </Link>
                   </motion.div>
                 ))}
-              </div>
-              <button onClick={() => scroll(similarScrollRef, 'right')} className="absolute right-0 top-1/2 -translate-y-1/2 z-20 bg-black/50 backdrop-blur-sm p-2 rounded-l-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-black/70 hover:scale-110 active:scale-95">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-              </button>
+              </ScrollRow>
             </motion.div>
           )}
         </div>

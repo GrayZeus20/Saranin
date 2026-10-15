@@ -46,6 +46,26 @@ interface PersonCombinedCredits {
 
 interface CreditsResponse { cast?: any[]; crew?: any[] }
 
+// Prolific actors carry hundreds of credits. Rendering the whole filmography
+// at once makes the page crawl on a phone, so it reveals in pages.
+const FILMOGRAPHY_PAGE = 24
+
+// One subtitle line for both tabs: cast shows the character, crew shows the job.
+function creditSubtitle(credit: CastCredit | CrewCredit, tab: 'cast' | 'crew') {
+  if (tab === 'cast') {
+    return <>as <span className="text-text-secondary font-medium">{(credit as CastCredit).character || 'N/A'}</span></>
+  }
+  const crew = credit as CrewCredit
+  return (
+    <>
+      <span className="text-accent font-medium">{crew.job}</span>
+      {crew.department && crew.department !== 'Directing' && crew.department !== 'Writing' && (
+        <span className="text-text-muted"> — {crew.department}</span>
+      )}
+    </>
+  )
+}
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return 'Unknown'
   return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -66,7 +86,14 @@ export default function PersonDetailPage() {
   const [credits, setCredits] = useState<PersonCombinedCredits | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'cast' | 'crew'>('cast')
+  const [visibleCount, setVisibleCount] = useState(FILMOGRAPHY_PAGE)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Each tab starts collapsed again — its own list has a different length.
+  const selectTab = (tab: 'cast' | 'crew') => {
+    setActiveTab(tab)
+    setVisibleCount(FILMOGRAPHY_PAGE)
+  }
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -114,6 +141,11 @@ export default function PersonDetailPage() {
   const sortedCrew = credits?.crew
     ?.filter(c => c.title)
     .sort((a, b) => (b.release_date || '').localeCompare(a.release_date || '')) || []
+
+  // Slice the active list for the current reveal window.
+  const activeCredits = activeTab === 'cast' ? sortedCast : sortedCrew
+  const visibleCredits = activeCredits.slice(0, visibleCount)
+  const hasMoreCredits = activeCredits.length > visibleCredits.length
 
   if (loading) {
     return (
@@ -182,7 +214,7 @@ export default function PersonDetailPage() {
                 {person.name}
               </h1>
 
-              {person.also_known_as.length > 0 && (
+              {(person.also_known_as?.length ?? 0) > 0 && (
                 <p className="text-text-muted text-xs mb-3">
                   Also known as: {person.also_known_as.slice(0, 3).join(', ')}
                 </p>
@@ -231,7 +263,7 @@ export default function PersonDetailPage() {
               <h2 className="text-lg font-bold text-text-primary">Filmography</h2>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setActiveTab('cast')}
+                  onClick={() => selectTab('cast')}
                   className={`text-xs font-bold px-4 py-1.5 rounded-full transition-all ${
                     activeTab === 'cast' ? 'bg-accent text-black' : 'bg-surface-elevated border border-zinc-800 text-text-muted hover:border-zinc-600'
                   }`}
@@ -240,7 +272,7 @@ export default function PersonDetailPage() {
                 </button>
                 {sortedCrew.length > 0 && (
                   <button
-                    onClick={() => setActiveTab('crew')}
+                    onClick={() => selectTab('crew')}
                     className={`text-xs font-bold px-4 py-1.5 rounded-full transition-all ${
                       activeTab === 'crew' ? 'bg-accent text-black' : 'bg-surface-elevated border border-zinc-800 text-text-muted hover:border-zinc-600'
                     }`}
@@ -251,105 +283,66 @@ export default function PersonDetailPage() {
               </div>
             </div>
 
-            {activeTab === 'cast' ? (
-              <div className="space-y-3">
-                {sortedCast.map((credit, i) => (
-                  <motion.div
-                    key={`${credit.id}-${credit.character}`}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3, delay: Math.min(i * 0.03, 0.5) }}
+            {/* Cast and crew credits render through one card — the two lists
+                only differ in their subtitle line. */}
+            <div className="space-y-3">
+              {visibleCredits.map((credit, i) => (
+                <motion.div
+                  // movie and tv ids are separate TMDB namespaces, so the bare
+                  // id is not unique across a combined-credits list.
+                  key={`${credit.media_type}-${credit.id}-${activeTab === 'cast' ? (credit as CastCredit).character : (credit as CrewCredit).job}`}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3, delay: Math.min(i * 0.03, 0.5) }}
+                >
+                  <Link
+                    to={`/${credit.media_type || 'movie'}/${credit.id}`}
+                    className="flex gap-4 p-3 rounded-xl bg-surface-elevated border border-zinc-800/50 hover:border-zinc-600 transition-all group"
                   >
-                    <Link
-                      to={`/${credit.media_type || 'movie'}/${credit.id}`}
-                      className="flex gap-4 p-3 rounded-xl bg-surface-elevated border border-zinc-800/50 hover:border-zinc-600 transition-all group"
-                    >
-                      <div className="shrink-0 w-12 h-16 rounded-lg overflow-hidden bg-surface-card">
-                        {credit.poster_path ? (
-                          <img
-                            src={`${IMG_BASE}/w92${credit.poster_path}`}
-                            alt={credit.title}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-zinc-700 text-xs font-bold">{credit.media_type === 'tv' ? '📺' : '🎬'}</div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-text-primary text-sm font-bold line-clamp-1 group-hover:text-accent transition-colors">
-                          {credit.title}
-                        </p>
-                        <p className="text-text-muted text-xs">
-                          as <span className="text-text-secondary font-medium">{credit.character || 'N/A'}</span>
-                        </p>
-                        {credit.release_date && (
-                          <p className="text-text-muted text-[10px] mt-0.5">{credit.release_date.split('-')[0]}</p>
-                        )}
-                      </div>
-                      <div className="shrink-0 flex items-center">
-                        {credit.vote_average > 0 && (
-                          <span className="text-accent text-[10px] font-mono font-bold">★ {credit.vote_average.toFixed(1)}</span>
-                        )}
-                      </div>
-                    </Link>
-                  </motion.div>
-                ))}
-                {sortedCast.length === 0 && (
-                  <p className="text-text-muted text-sm text-center py-8">No acting credits found</p>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {sortedCrew.map((credit, i) => (
-                  <motion.div
-                    key={`${credit.id}-${credit.job}`}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3, delay: Math.min(i * 0.03, 0.5) }}
-                  >
-                    <Link
-                      to={`/${credit.media_type || 'movie'}/${credit.id}`}
-                      className="flex gap-4 p-3 rounded-xl bg-surface-elevated border border-zinc-800/50 hover:border-zinc-600 transition-all group"
-                    >
-                      <div className="shrink-0 w-12 h-16 rounded-lg overflow-hidden bg-surface-card">
-                        {credit.poster_path ? (
-                          <img
-                            src={`${IMG_BASE}/w92${credit.poster_path}`}
-                            alt={credit.title}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-zinc-700 text-xs font-bold">{credit.media_type === 'tv' ? '📺' : '🎬'}</div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-text-primary text-sm font-bold line-clamp-1 group-hover:text-accent transition-colors">
-                          {credit.title}
-                        </p>
-                        <p className="text-text-muted text-xs">
-                          <span className="text-accent font-medium">{credit.job}</span>
-                          {credit.department && credit.department !== 'Directing' && credit.department !== 'Writing' && (
-                            <span className="text-text-muted"> — {credit.department}</span>
-                          )}
-                        </p>
-                        {credit.release_date && (
-                          <p className="text-text-muted text-[10px] mt-0.5">{credit.release_date.split('-')[0]}</p>
-                        )}
-                      </div>
-                      <div className="shrink-0 flex items-center">
-                        {credit.vote_average > 0 && (
-                          <span className="text-accent text-[10px] font-mono font-bold">★ {credit.vote_average.toFixed(1)}</span>
-                        )}
-                      </div>
-                    </Link>
-                  </motion.div>
-                ))}
-                {sortedCrew.length === 0 && (
-                  <p className="text-text-muted text-sm text-center py-8">No crew credits found</p>
-                )}
-              </div>
+                    <div className="shrink-0 w-12 h-16 rounded-lg overflow-hidden bg-surface-card">
+                      {credit.poster_path ? (
+                        <img
+                          src={`${IMG_BASE}/w92${credit.poster_path}`}
+                          alt={credit.title}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-zinc-700 text-xs font-bold">{credit.media_type === 'tv' ? '📺' : '🎬'}</div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-text-primary text-sm font-bold line-clamp-1 group-hover:text-accent transition-colors">
+                        {credit.title}
+                      </p>
+                      <p className="text-text-muted text-xs">{creditSubtitle(credit, activeTab)}</p>
+                      {credit.release_date && (
+                        <p className="text-text-muted text-[10px] mt-0.5">{credit.release_date.split('-')[0]}</p>
+                      )}
+                    </div>
+                    <div className="shrink-0 flex items-center">
+                      {credit.vote_average > 0 && (
+                        <span className="text-accent text-[10px] font-mono font-bold">★ {credit.vote_average.toFixed(1)}</span>
+                      )}
+                    </div>
+                  </Link>
+                </motion.div>
+              ))}
+              {activeCredits.length === 0 && (
+                <p className="text-text-muted text-sm text-center py-8">
+                  {activeTab === 'cast' ? 'No acting credits found' : 'No crew credits found'}
+                </p>
+              )}
+            </div>
+
+            {hasMoreCredits && (
+              <button
+                onClick={() => setVisibleCount(n => n + FILMOGRAPHY_PAGE)}
+                className="mt-6 w-full text-xs font-bold py-3 rounded-full bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-accent transition-all active:scale-95"
+              >
+                Show {Math.min(FILMOGRAPHY_PAGE, activeCredits.length - visibleCredits.length)} more
+                <span className="text-text-muted/60"> ({activeCredits.length - visibleCredits.length} remaining)</span>
+              </button>
             )}
           </motion.div>
         </div>

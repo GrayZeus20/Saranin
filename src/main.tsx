@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MotionConfig } from 'motion/react'
 import { Toaster } from 'sonner'
 import ErrorBoundary from './components/ErrorBoundary'
 import App from './App'
@@ -44,21 +45,25 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   // but removing StrictMode keeps sessions stable across hot-reloads.
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route path="/" element={<App />} />
-            <Route path="/movie/:id" element={<MovieDetailPage />} />
-            <Route path="/tv/:id" element={<MovieDetailPage />} />
-            <Route path="/person/:id" element={<PersonDetailPage />} />
-            <Route path="/company/:id" element={<CompanyDetailPage />} />
-            <Route path="/category/:type" element={<CategoryPage />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="*" element={<App />} />
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
-      <Toaster position="bottom-right" theme="dark" />
+      {/* reducedMotion="user" makes every motion/* animation in the tree respect
+          the OS "reduce motion" setting instead of animating regardless. */}
+      <MotionConfig reducedMotion="user">
+        <BrowserRouter>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<App />} />
+              <Route path="/movie/:id" element={<MovieDetailPage />} />
+              <Route path="/tv/:id" element={<MovieDetailPage />} />
+              <Route path="/person/:id" element={<PersonDetailPage />} />
+              <Route path="/company/:id" element={<CompanyDetailPage />} />
+              <Route path="/category/:type" element={<CategoryPage />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="*" element={<App />} />
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+        <Toaster position="bottom-right" theme="dark" />
+      </MotionConfig>
     </QueryClientProvider>
   </ErrorBoundary>
 )
