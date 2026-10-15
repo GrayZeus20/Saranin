@@ -1,16 +1,19 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams, useNavigationType } from 'react-router-dom'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import { toast } from 'sonner'
 import { ImageWithFallback } from './components/ImageWithFallback'
 import Navbar from './components/Navbar'
 import ScrollRow from './components/ScrollRow'
+import { WatchButton } from './components/WatchButton'
+import Footer from './components/Footer'
 import { fetchWithRateLimit, IMG_BASE, TMDB_TOKEN } from './utils/api'
 import { formatDate, GENRE_MAP } from './utils/constants'
 import { normalizeMovie, normalizeTv, dedupById, type Movie } from './utils/tmdb'
 import { getRegionProviders } from './utils/providers'
-import { fetchDiscoverPage, WATCH_REGION, TMDB_MAX_PAGE, type CombinedPage, type TMDBListResponse, type DiscoverSort } from './utils/discover'
+import { useRegion } from './utils/region'
+import { fetchDiscoverPage, TMDB_MAX_PAGE, type CombinedPage, type TMDBListResponse, type DiscoverSort } from './utils/discover'
 
 // Environment validation
 if (!TMDB_TOKEN) {
@@ -156,6 +159,10 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink,
                 <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1.5 py-0.5 rounded">
                   &#9733; {m.vote_average?.toFixed(1)}
                 </div>
+                <WatchButton
+                  className="!bottom-1.5 !right-1.5 !w-7 !h-7"
+                  entry={{ id: m.id, media_type: m.media_type === 'tv' ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
+                />
               </div>
               <p className="text-text-primary text-[11px] font-bold line-clamp-1 mt-1.5">{m.title}</p>
             </div>
@@ -168,28 +175,97 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink,
 
 export default function App() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigationType = useNavigationType()
 
-  const [currentPage, setCurrentPage] = useState(1)
-  const [activeCategory, setActiveCategory] = useState<CategoryKey>('now_playing')
-  const [activeGenres, setActiveGenres] = useState<number[]>([])
-  const [activePlatform, setActivePlatform] = useState<number | null>(null)
-  const [showGenres, setShowGenres] = useState(false)
-  const [contentType, setContentType] = useState<ContentType>('movie')
+  // View state lives in the URL, not in useState: opening a title unmounts this
+  // page, so component state was lost and Back dumped the user on page 1 with
+  // every filter cleared.
+  const currentPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)
+  // Validate every URL value: a hand-edited or stale query string must not crash
+  // the grid (CATEGORY_ENDPOINTS[undefined]) or poison the query key (NaN provider).
+  const rawCategory = searchParams.get('cat')
+  const activeCategory: CategoryKey = rawCategory && rawCategory in CATEGORY_ENDPOINTS ? (rawCategory as CategoryKey) : 'now_playing'
+  const activeGenres = useMemo(() => {
+    const raw = searchParams.get('genres')
+    if (!raw) return []
+    return raw.split(',').map(Number).filter(n => Number.isFinite(n) && n > 0)
+  }, [searchParams])
+  const rawPlatform = Number(searchParams.get('provider'))
+  const activePlatform = Number.isFinite(rawPlatform) && rawPlatform > 0 ? rawPlatform : null
+  const rawType = searchParams.get('type')
+  const contentType: ContentType = rawType === 'movie' || rawType === 'tv' || rawType === 'anime' || rawType === 'all' ? rawType : 'movie'
+
+  const [showGenres, setShowGenres] = useState(() => searchParams.get('filters') === '1')
+
+  const { region } = useRegion()
+
+  // Single writer for the URL. `replace` is the default so filter toggling does
+  // not stack history entries; paging pushes so Back walks pages, and returning
+  // from a detail page only scrolls (React Router has already restored the old
+  // entry — a second scrollTo would fight it).
+  const updateParams = useCallback((updates: Record<string, string | null>, opts?: { push?: boolean }) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      for (const [key, value] of Object.entries(updates)) {
+        if (value === null || value === '') next.delete(key)
+        else next.set(key, value)
+      }
+      return next
+    }, { replace: !opts?.push })
+  }, [setSearchParams])
+
+  // --- Page scroll: top on forward navigation, restored on Back/Forward ---
+  useEffect(() => {
+    const key = `saranin:scroll:home:${searchParams.toString()}`
+    if (navigationType === 'POP') {
+      let saved = 0
+      try {
+        saved = Number(sessionStorage.getItem(key)) || 0
+      } catch {
+        // storage blocked — staying at the top is acceptable
+      }
+      if (saved > 0) window.scrollTo({ top: saved })
+      return
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [searchParams, navigationType])
+
+  // Record the scroll position so a later Back can land where the user left.
+  useEffect(() => {
+    const key = `saranin:scroll:home:${searchParams.toString()}`
+    let ticking = false
+    const onScroll = () => {
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(() => {
+        ticking = false
+        try {
+          sessionStorage.setItem(key, String(window.scrollY))
+        } catch {
+          // storage blocked — best effort only
+        }
+      })
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [searchParams])
 
   const gridTopRef = useRef<HTMLDivElement>(null)
 
   // --- Current page query: exactly one TMDB page per view ---
-  const endpoints = CATEGORY_ENDPOINTS[activeCategory]
+  const endpoints = CATEGORY_ENDPOINTS[activeCategory] ?? CATEGORY_ENDPOINTS.now_playing
   const pageQuery = useQuery({
-    queryKey: ['home', activeCategory, currentPage, activePlatform],
+    queryKey: ['home', activeCategory, currentPage, activePlatform, region],
     queryFn: () => activePlatform === null
       ? fetchCombinedPage(endpoints.movie, endpoints.tv, currentPage)
       : fetchDiscoverPage({
-          sort: CATEGORY_SORT[activeCategory],
+          sort: CATEGORY_SORT[activeCategory] ?? CATEGORY_SORT.now_playing,
           providerIds: [activePlatform],
           page: currentPage,
           voteFloor: activeCategory === 'top_rated',
           excludeAnime: true,
+          region,
         }),
     placeholderData: keepPreviousData,
     retry: 2,
@@ -198,8 +274,8 @@ export default function App() {
 
   // --- Region streaming catalog for the Platform filter ---
   const { data: regionProviders } = useQuery({
-    queryKey: ['region_providers', WATCH_REGION],
-    queryFn: () => getRegionProviders(WATCH_REGION),
+    queryKey: ['region_providers', region],
+    queryFn: () => getRegionProviders(region),
     staleTime: Infinity,
     retry: 1,
   })
@@ -267,33 +343,60 @@ export default function App() {
   const gridMovies = isFirstPage ? filteredMovies.slice(1) : filteredMovies
 
   const goToPage = useCallback((next: number) => {
-    setCurrentPage(Math.max(1, next))
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [])
+    const page = Math.max(1, next)
+    updateParams({ page: page === 1 ? null : String(page) }, { push: true })
+  }, [updateParams])
 
   const toggleCategory = useCallback((key: CategoryKey) => {
-    setActiveCategory(key)
-    setActiveGenres([])
-    setContentType('movie')
-    setCurrentPage(1)
-  }, [])
+    // Category defaults back to now_playing / movie / no genres — same reset the
+    // old setState version performed, but written to the URL in one go.
+    updateParams({
+      cat: key === 'now_playing' ? null : key,
+      genres: null,
+      type: null,
+      page: null,
+    })
+  }, [updateParams])
 
   const toggleGenre = useCallback((id: number) => {
-    setActiveGenres(prev => prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id])
-  }, [])
+    const next = activeGenres.includes(id)
+      ? activeGenres.filter(g => g !== id)
+      : [...activeGenres, id]
+    updateParams({ genres: next.length > 0 ? next.join(',') : null })
+  }, [activeGenres, updateParams])
 
   // Single-select platform filter — 'All' clears it. Changing it re-fetches page 1.
   const selectPlatform = useCallback((id: number | null) => {
-    setActivePlatform(id)
-    setActiveGenres([])
-    setCurrentPage(1)
-  }, [])
+    // Region drives the provider catalog, so a stale provider from another
+    // region must not survive the switch.
+    updateParams({
+      provider: id === null ? null : String(id),
+      genres: null,
+      page: null,
+    })
+  }, [updateParams])
+
+  const setContentTypeFilter = useCallback((type: ContentType) => {
+    updateParams({ type: type === 'movie' ? null : type })
+  }, [updateParams])
+
+  // One writer for "back to defaults": every filter key plus the page number, in
+  // a single history entry. Both the header Reset and the empty-state Reset All
+  // Filters route through this, so the two can never drift apart.
+  const resetFilters = useCallback(() => {
+    updateParams({ cat: null, genres: null, provider: null, type: null, page: null })
+  }, [updateParams])
 
   const scrollToGrid = useCallback(() => {
     gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
-  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'all' ? 1 : 0)
+  // 'movie' is the default view, not a filter — counting it showed a badge of 1
+  // on a pristine home. Deviation from the default is what counts.
+  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'movie' ? 1 : 0)
+  // `activeFilterCount` drives the badge; the Reset control must also appear when
+  // only the category moved, since resetFilters clears that too.
+  const hasActiveFilters = activeFilterCount > 0 || activeCategory !== 'now_playing'
 
   const trendingRowItems = useMemo(() => (trendingRow.data?.items ?? []).slice(0, 16), [trendingRow.data])
   const popularRowItems = useMemo(() => (popularRow.data?.items ?? []).slice(0, 16), [popularRow.data])
@@ -306,12 +409,24 @@ export default function App() {
           <p className="text-5xl mb-4">&#x1f3ac;</p>
           <p className="text-text-primary text-lg font-semibold mb-2">Something went wrong</p>
           <p className="text-text-muted text-sm">{(pageQuery.error as Error)?.message || 'Failed to load content'}</p>
-          <button
-            onClick={() => pageQuery.refetch()}
-            className="mt-6 bg-accent text-black text-sm font-bold px-6 py-2.5 rounded-full active:scale-95 transition-transform"
-          >
-            Try Again
-          </button>
+          <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
+            <button
+              onClick={() => pageQuery.refetch()}
+              className="bg-accent text-black text-sm font-bold px-6 py-2.5 rounded-full active:scale-95 transition-transform"
+            >
+              Try Again
+            </button>
+            {/* A failing URL is often the fault of its own params — without this
+                escape hatch the user is stuck retrying a request that cannot heal. */}
+            {(hasActiveFilters || currentPage > 1) && (
+              <button
+                onClick={resetFilters}
+                className="text-text-muted text-sm font-bold px-6 py-2.5 rounded-full border border-zinc-800 hover:border-red-500 hover:text-red-400 transition-all active:scale-95"
+              >
+                Reset Filters
+              </button>
+            )}
+          </div>
         </div>
       </div>
     )
@@ -363,8 +478,10 @@ export default function App() {
             <div className="relative h-[50vh] sm:h-[60vh] md:h-[75vh]">
               {featured.backdrop_path ? (
                 <img
-                  src={`${IMG_BASE}/original${featured.backdrop_path}`}
+                  src={`${IMG_BASE}/w1280${featured.backdrop_path}`}
                   alt={featured.title}
+                  fetchPriority="high"
+                  decoding="async"
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
               ) : (
@@ -450,7 +567,7 @@ export default function App() {
           transition={{ duration: 0.5, delay: 0.3 }}
           className="mb-6 md:mb-8 scroll-mt-20"
         >
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <h3 className="text-lg sm:text-xl font-bold text-text-primary">{endpoints.label}</h3>
               <p className="text-text-muted text-xs sm:text-sm mt-1">
@@ -458,8 +575,22 @@ export default function App() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {/* Reset lives in the header too: the empty-state copy was
+                  unreachable while the active filters still returned results. */}
+              {hasActiveFilters && (
+                <button
+                  onClick={resetFilters}
+                  className="bg-surface-elevated border border-zinc-800 text-text-muted text-xs font-bold px-4 py-2 rounded-full hover:border-red-500 hover:text-red-400 transition-all active:scale-95"
+                >
+                  Reset
+                </button>
+              )}
               <button
-                onClick={() => setShowGenres(!showGenres)}
+                onClick={() => {
+                  const next = !showGenres
+                  setShowGenres(next)
+                  updateParams({ filters: next ? '1' : null })
+                }}
                 className="bg-surface-elevated border border-zinc-800 text-text-primary text-xs font-bold px-4 py-2 rounded-full hover:border-accent transition-all active:scale-95 flex items-center gap-2"
               >
                 {showGenres ? 'Hide Filters' : 'Filters'}
@@ -507,7 +638,7 @@ export default function App() {
                   <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Genre</p>
                   <div className="flex flex-wrap gap-2">
                     <button
-                      onClick={() => setActiveGenres([])}
+                      onClick={() => updateParams({ genres: null })}
                       className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                         activeGenres.length === 0
                           ? 'bg-accent text-black'
@@ -590,7 +721,7 @@ export default function App() {
                     ] as { key: ContentType; label: string }[]).map(t => (
                       <button
                         key={t.key}
-                        onClick={() => setContentType(t.key)}
+                        onClick={() => setContentTypeFilter(t.key)}
                         className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                           contentType === t.key
                             ? 'bg-accent text-black'
@@ -630,11 +761,10 @@ export default function App() {
               >
                 <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
                   {movie.poster_path ? (
-                    <img
-                      src={`${IMG_BASE}/w500${movie.poster_path}`}
+                    <ImageWithFallback
+                      src={`${IMG_BASE}/w342${movie.poster_path}`}
                       alt={movie.title}
                       className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-                      loading="lazy"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-zinc-700 text-sm font-bold">{movie.title?.charAt(0)}</div>
@@ -655,6 +785,10 @@ export default function App() {
                   {isAnime(movie) && (
                     <div className={`absolute top-2 left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md ${movie.media_type === 'tv' ? 'top-8' : ''}`}>Anime</div>
                   )}
+                  {/* Watchlist save — same control as the rails and detail page */}
+                  <WatchButton
+                    entry={{ id: movie.id, media_type: movie.media_type === 'tv' ? 'tv' : 'movie', title: movie.title, poster_path: movie.poster_path, vote_average: movie.vote_average, release_date: movie.release_date }}
+                  />
                   {/* Bottom info */}
                   <div className="absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/90 to-transparent">
                     <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5">{movie.title}</p>
@@ -720,7 +854,7 @@ export default function App() {
               </button>
               {contentType === 'anime' && (
                 <button
-                  onClick={() => setContentType('all')}
+                  onClick={() => setContentTypeFilter('all')}
                   className="text-xs font-medium px-4 py-2 rounded-full bg-surface-elevated text-text-muted border border-zinc-800 hover:border-accent hover:text-accent transition-all"
                 >
                   Show All Content
@@ -728,14 +862,14 @@ export default function App() {
               )}
               {contentType !== 'anime' && (
                 <button
-                  onClick={() => setContentType('anime')}
+                  onClick={() => setContentTypeFilter('anime')}
                   className="text-xs font-medium px-4 py-2 rounded-full bg-surface-elevated text-text-muted border border-zinc-800 hover:border-accent hover:text-accent transition-all"
                 >
                   Browse Anime
                 </button>
               )}
               <button
-                onClick={() => { setActiveGenres([]); setActivePlatform(null); setContentType('movie') }}
+                onClick={resetFilters}
                 className="text-xs font-medium px-4 py-2 rounded-full bg-accent text-black hover:bg-accent/90 transition-all"
               >
                 Reset All Filters
@@ -744,6 +878,9 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* TMDB attribution — required by the API terms */}
+      <Footer />
     </div>
   )
 }

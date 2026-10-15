@@ -20,3 +20,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # Headless-Chromium drag test for the ScrollRow rail. ubuntu-latest ships
+      # google-chrome-stable, which scripts/dragtest/cdp.mjs finds via its
+      # Linux candidates. Sandbox flags are handled inside the test.
+      - run: npm run test:drag

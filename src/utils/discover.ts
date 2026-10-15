@@ -7,8 +7,8 @@
 
 import { fetchWithRateLimit } from './api'
 import { normalizeMovie, normalizeTv, dedupById, type Movie } from './tmdb'
+import { DEFAULT_REGION } from './region'
 
-export const WATCH_REGION = 'ID'
 export const TMDB_MAX_PAGE = 500
 export const VOTE_COUNT_FLOOR = '200' // keeps vote_average.desc from surfacing 1-vote obscurities
 export const ANIMATION_GENRE = '16' // the TV half of a combined grid strips anime
@@ -48,7 +48,7 @@ export function buildDiscoverParams(opts: DiscoverOptions): URLSearchParams {
   const params = new URLSearchParams({
     language: 'en-US',
     page: String(opts.page),
-    watch_region: opts.region ?? WATCH_REGION,
+    watch_region: opts.region ?? DEFAULT_REGION,
     with_watch_providers: opts.providerIds.join('|'),
     with_watch_monetization_types: 'flatrate',
     sort_by: opts.sort.movie,

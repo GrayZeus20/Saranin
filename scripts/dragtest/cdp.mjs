@@ -9,15 +9,24 @@ import path from 'node:path'
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // Prefer the Playwright-bundled Chromium (present wherever Playwright ran),
-// then a system Chrome, then Edge.
+// then a system Chrome, then Edge. Windows paths first, then Linux/macOS so CI
+// (ubuntu-latest) can find the browser it ships with.
 const LOCAL = process.env.LOCALAPPDATA || ''
 export const CHROME_CANDIDATES = [
+  // Windows
   `${LOCAL}/ms-playwright/chromium-1234/chrome-win64/chrome.exe`,
   `${LOCAL}/ms-playwright/chromium-1223/chrome-win64/chrome.exe`,
   `${LOCAL}/ms-playwright/chromium-1208/chrome-win64/chrome.exe`,
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+  // Linux (GitHub Actions ubuntu-latest ships google-chrome-stable)
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium-browser',
+  '/usr/bin/chromium',
+  // macOS
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
 ]
 
 export function findChrome() {

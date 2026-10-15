@@ -4,11 +4,15 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import { ImageWithFallback } from '../components/ImageWithFallback'
 import Navbar from '../components/Navbar'
+import Footer from '../components/Footer'
+import { WatchButton } from '../components/WatchButton'
 import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
 import { GENRE_MAP, formatDate } from '../utils/constants'
 import { normalizeMovie, normalizeTv, dedupById, type Movie } from '../utils/tmdb'
 import { getRegionProviders } from '../utils/providers'
-import { fetchDiscoverPage, WATCH_REGION, TMDB_MAX_PAGE, type CombinedPage, type TMDBListResponse, type DiscoverSort } from '../utils/discover'
+import { useRegion } from '../utils/region'
+import { useDocumentTitle } from '../utils/useDocumentTitle'
+import { fetchDiscoverPage, TMDB_MAX_PAGE, type CombinedPage, type TMDBListResponse, type DiscoverSort } from '../utils/discover'
 
 type ContentType = 'all' | 'movie' | 'tv' | 'anime'
 
@@ -59,6 +63,9 @@ export default function CategoryPage() {
   const categoryKey = type || 'popular'
   const endpoints = ENDPOINT_MAP[categoryKey] || ENDPOINT_MAP.popular
   const sort = CATEGORY_SORT[categoryKey] || CATEGORY_SORT.popular
+  const { region } = useRegion()
+
+  useDocumentTitle(`${TITLES[categoryKey] || 'Popular'} — SARANIN.`)
 
   // Reset view state when the category route changes — React Query key handles the data swap.
   useEffect(() => {
@@ -69,8 +76,9 @@ export default function CategoryPage() {
   }, [type])
 
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
-    // activePlatform drives a different data source, so it belongs in the key.
-    queryKey: ['category', type, page, activePlatform],
+    // activePlatform drives a different data source, so it belongs in the key;
+    // region does too, because the provider ids only mean something in one region.
+    queryKey: ['category', type, page, activePlatform, region],
     queryFn: async (): Promise<CombinedPage> => {
       // Platform picked → server-side /discover so the grid actually fills.
       if (activePlatform !== null) {
@@ -80,7 +88,7 @@ export default function CategoryPage() {
           page,
           voteFloor: categoryKey === 'top_rated',
           excludeAnime: true,
-          region: WATCH_REGION,
+          region,
         })
       }
       const [movieData, tvData] = await Promise.all([
@@ -101,8 +109,8 @@ export default function CategoryPage() {
 
   // Region streaming catalog — same curated Netflix/Prime-first list as home.
   const { data: regionProviders } = useQuery({
-    queryKey: ['region_providers', WATCH_REGION],
-    queryFn: () => getRegionProviders(WATCH_REGION),
+    queryKey: ['region_providers', region],
+    queryFn: () => getRegionProviders(region),
     staleTime: Infinity,
     retry: 1,
   })
@@ -145,6 +153,13 @@ export default function CategoryPage() {
     setActiveGenres([])
     setPage(1)
   }, [])
+
+  // Region changes invalidate the provider ids — a Netflix id is only Netflix
+  // inside the region it was picked from.
+  useEffect(() => {
+    setActivePlatform(null)
+    setPage(1)
+  }, [region])
 
   const goToPage = (next: number) => {
     setPage(Math.max(1, Math.min(totalPages, next)))
@@ -337,6 +352,10 @@ export default function CategoryPage() {
                     {isAnime(m) && (
                       <div className={`absolute top-2 left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md ${m.media_type === 'tv' ? 'top-8' : ''}`}>Anime</div>
                     )}
+                    <WatchButton
+                      className="!bottom-1.5 !right-1.5 !w-7 !h-7"
+                      entry={{ id: m.id, media_type: m.media_type === 'tv' ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
+                    />
                   </div>
                   <p className="mt-2 text-xs sm:text-sm font-bold text-text-primary line-clamp-1 group-hover:text-accent transition-colors">{m.title}</p>
                   <p className="text-text-muted text-[10px]">{formatDate(m.release_date)}</p>
@@ -411,6 +430,7 @@ export default function CategoryPage() {
           </button>
         </div>
       </div>
+      <Footer />
     </div>
   )
 }

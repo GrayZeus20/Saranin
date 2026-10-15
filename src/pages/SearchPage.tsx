@@ -4,9 +4,12 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import { ImageWithFallback } from '../components/ImageWithFallback'
 import Navbar from '../components/Navbar'
+import Footer from '../components/Footer'
+import { WatchButton } from '../components/WatchButton'
 import { fetchWithRateLimit, IMG_BASE } from '../utils/api'
 import { formatDate, GENRE_MAP } from '../utils/constants'
 import { normalizeMovie, normalizeTv, type Movie } from '../utils/tmdb'
+import { useDocumentTitle } from '../utils/useDocumentTitle'
 
 type SearchType = 'all' | 'movie' | 'tv' | 'anime'
 
@@ -51,6 +54,8 @@ export default function SearchPage() {
   const [input, setInput] = useState(q)
   const [type, setType] = useState<SearchType>('all')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useDocumentTitle(q ? `Search: ${q} — SARANIN.` : 'Search — SARANIN.')
 
   // URL is the source of truth for the query; keep the box in sync on back/forward.
   useEffect(() => { setInput(q) }, [q])
@@ -259,6 +264,10 @@ export default function SearchPage() {
                       {isAnime(m) && (
                         <div className={`absolute top-2 left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md ${m.media_type === 'tv' ? 'top-8' : ''}`}>Anime</div>
                       )}
+                      <WatchButton
+                        className="!bottom-1.5 !right-1.5 !w-7 !h-7"
+                        entry={{ id: m.id, media_type: m.media_type === 'tv' ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
+                      />
                       <div className="absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/90 to-transparent">
                         <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5">{m.title}</p>
                         <div className="flex items-center gap-1.5">
@@ -341,6 +350,7 @@ export default function SearchPage() {
           </>
         )}
       </div>
+      <Footer />
     </div>
   )
 }

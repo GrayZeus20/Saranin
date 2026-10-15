@@ -6,14 +6,12 @@
 // here is the curated region catalog the filter pills are built from.
 
 import { fetchWithRateLimit } from './api'
+import { DEFAULT_REGION } from './region'
 import type { WatchProvider } from './tmdb'
 
 interface ProviderCatalogResponse {
   results?: WatchProvider[]
 }
-
-// Region default for SARANIN. Matches detail pages (ID = Indonesia).
-export const REGION = 'ID'
 
 // Priority order for the filter bar. Only providers actually available in the
 // region are shown; the rest are ignored. Netflix / Prime / Disney+ come first.
@@ -42,12 +40,16 @@ export interface CatalogEntry {
   logo_path: string
 }
 
-let catalogPromise: Promise<CatalogEntry[]> | null = null
+// Keyed by region: the old single-promise cache served Indonesia's catalog after
+// the user switched regions, which both mislabelled the pills and filtered the
+// grid against the wrong provider set.
+const catalogPromises = new Map<string, Promise<CatalogEntry[]>>()
 
-/** Watch providers available in the region, curated order first. Cached per session. */
-export function getRegionProviders(region: string = REGION): Promise<CatalogEntry[]> {
-  if (catalogPromise) return catalogPromise
-  catalogPromise = (async () => {
+/** Watch providers available in the region, curated order first. Cached per region per session. */
+export function getRegionProviders(region: string = DEFAULT_REGION): Promise<CatalogEntry[]> {
+  const cached = catalogPromises.get(region)
+  if (cached) return cached
+  const promise = (async () => {
     try {
       const data = await fetchWithRateLimit<ProviderCatalogResponse>(
         `/watch/providers/movie?language=en-US&watch_region=${region}`
@@ -72,5 +74,6 @@ export function getRegionProviders(region: string = REGION): Promise<CatalogEntr
       return []
     }
   })()
-  return catalogPromise
+  catalogPromises.set(region, promise)
+  return promise
 }
