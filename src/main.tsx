@@ -6,6 +6,7 @@ import { MotionConfig } from 'motion/react'
 import { Toaster } from 'sonner'
 import ErrorBoundary from './components/ErrorBoundary'
 import App from './App'
+import { startPwaUpdates } from './utils/pwaUpdate'
 import './index.css'
 
 // Lazy load non-critical pages for code splitting
@@ -24,23 +25,29 @@ const WatchlistPage = lazy(() => import('./pages/WatchlistPage'))
 // shell and then dies on a chunk that was never fetched. Warm it as soon as the
 // worker controls this page (after activate/claim on the first visit; already
 // true on every later one).
-const warmOfflineChunks = () => {
-  if (!navigator.serviceWorker.controller) return
-  import('./pages/WatchlistPage').catch(() => {
-    // A failed warm must never affect the running page — the next online visit retries.
-  })
-}
+//
+// Registration + the update loop live in utils/pwaUpdate: a deploy must reach an
+// already-open tab, not just the next cold start (see that module's header).
+if (import.meta.env.PROD) {
+  startPwaUpdates()
 
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then((registration) => {
+  const warmOfflineChunks = () => {
+    if (!navigator.serviceWorker.controller) return
+    import('./pages/WatchlistPage').catch(() => {
+      // A failed warm must never affect the running page — the next online visit retries.
+    })
+  }
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then((registration) => {
       registration.active?.state === 'activated' && navigator.serviceWorker.controller
         ? warmOfflineChunks()
         : navigator.serviceWorker.addEventListener('controllerchange', warmOfflineChunks, { once: true })
-    }).catch((err) => {
-      console.error('[sw] registration failed', err)
+    }).catch(() => {
+      // ready() never rejects in practice, but a rejected promise here must not
+      // surface as an unhandled rejection.
     })
-  })
+  }
 }
 
 // Loading fallback for lazy routes

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import { ImageWithFallback } from '../components/ImageWithFallback'
 import Navbar from '../components/Navbar'
@@ -30,21 +30,24 @@ function isAnime(m: Movie): boolean {
   return !!m.genre_ids?.includes(16) && m.original_language === 'ja'
 }
 
-// Single source of truth for the Type filter, matching App/CategoryPage: "TV"
-// must NOT also list anime, or the same show lands under two filters and the
-// per-type counts disagree with the rest of the app.
-function matchesType(m: Movie, type: SearchType): boolean {
-  if (type === 'all') return true
-  if (type === 'anime') return isAnime(m)
-  if (type === 'tv') return m.media_type === 'tv' && !isAnime(m)
-  return m.media_type === type
-}
-
 // Multi search returns people + collections; the grid only wants movie/tv.
 function normalizeMulti(results: any[]): Movie[] {
   return results
     .filter(r => r.media_type === 'movie' || r.media_type === 'tv')
     .map(r => (r.media_type === 'tv' ? normalizeTv(r) : normalizeMovie(r)))
+}
+
+// Which TMDB search endpoint backs a Type pill. `/search/multi` interleaves
+// movies, tv and people in one 20-item page, so client-filtering it to "Movies"
+// left ~8 tiles under a page-sized label. `movie` and `tv` ask the kind-specific
+// endpoints instead, so the page that arrives is already the right kind.
+// `anime` has no server-side equivalent (search exposes no genre/language params),
+// so it reads the tv endpoint and narrows client-side — the one remaining
+// approximation, and its label reports exactly what it shows.
+function searchEndpointFor(type: SearchType): 'multi' | 'movie' | 'tv' {
+  if (type === 'movie') return 'movie'
+  if (type === 'tv' || type === 'anime') return 'tv'
+  return 'multi'
 }
 
 export default function SearchPage() {
@@ -74,18 +77,25 @@ export default function SearchPage() {
   // New page must land at the top of the results, not mid-scroll.
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, [urlPage, q])
 
+  const endpointKind = searchEndpointFor(type)
+
   const searchQuery = useQuery({
-    queryKey: ['search', q, urlPage, locale],
+    // `type` is in the key because it changes the endpoint — a new pill is a new
+    // request, not a client-side re-slice of a page asked for a different kind.
+    queryKey: ['search', q, urlPage, locale, endpointKind],
     queryFn: async () => {
       const data = await fetchWithRateLimit<MultiSearchResponse>(
-        `/search/multi?query=${encodeURIComponent(q)}&language=${locale}&include_adult=false&page=${urlPage}`
+        `/search/${endpointKind}?query=${encodeURIComponent(q)}&language=${locale}&include_adult=false&page=${urlPage}`
       )
-      const items = normalizeMulti(data.results || [])
+      const items = endpointKind === 'multi'
+        ? normalizeMulti(data.results || [])
+        : (data.results || []).map(r => (endpointKind === 'tv' ? normalizeTv(r) : normalizeMovie(r)))
       const totalPages = Math.max(1, Math.min(TMDB_MAX_PAGE, data.total_pages || 1))
       return { items, totalPages, totalResults: data.total_results || 0 }
     },
     enabled: q.length > 0,
-    placeholderData: keepPreviousData,
+    // No placeholderData: keeping the previous query's results painted stale
+    // titles (and a stale total) while the new query was still in flight.
     retry: 2,
     retryDelay: 1000,
   })
@@ -95,20 +105,29 @@ export default function SearchPage() {
   const totalResults = searchQuery.data?.totalResults ?? 0
   const isFetching = searchQuery.isFetching
 
-  const filtered = useMemo(() => items.filter(m => matchesType(m, type)), [items, type])
-
-  // Counts follow matchesType, so the badge on a filter equals what it shows.
-  const typeCounts = useMemo(() => ({
-    all: items.length,
-    movie: items.filter(m => matchesType(m, 'movie')).length,
-    tv: items.filter(m => matchesType(m, 'tv')).length,
-    anime: items.filter(isAnime).length,
-  }), [items])
+  // Only the Anime pill still narrows client-side (search has no genre/language
+  // params); every other pill's page is already the right kind.
+  const filtered = useMemo(
+    () => (type === 'anime' ? items.filter(isAnime) : items),
+    [items, type]
+  )
 
   const submit = useCallback((value: string) => {
     const trimmed = value.trim()
     if (!trimmed) return
     setSearchParams({ q: trimmed, page: '1' })
+  }, [setSearchParams])
+
+  // A Type pill switches the endpoint, so a page number counted for the previous
+  // kind cannot carry over — page 3 of a 2000-result movie search is very often
+  // page 1 of the tv search. Reset to the first page on every pill change.
+  const selectType = useCallback((next: SearchType) => {
+    setType(next)
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev)
+      params.set('page', '1')
+      return params
+    })
   }, [setSearchParams])
 
   const goToPage = useCallback((next: number) => {
@@ -219,7 +238,7 @@ export default function SearchPage() {
             {/* Result summary + type filter */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
               <p className="text-text-muted text-xs sm:text-sm">
-                {searchQuery.isLoading ? 'Searching…' : totalResults > 0 ? (
+                {searchQuery.isLoading || isFetching ? 'Searching…' : totalResults > 0 ? (
                   <>
                     <span className="text-text-primary font-bold">{filtered.length}</span> shown of{' '}
                     <span className="text-text-primary font-bold">{totalResults}</span> for{' '}
@@ -240,7 +259,7 @@ export default function SearchPage() {
                 ] as { key: SearchType; label: string }[]).map(t => (
                   <button
                     key={t.key}
-                    onClick={() => setType(t.key)}
+                    onClick={() => selectType(t.key)}
                     className={`shrink-0 text-xs font-medium px-4 py-2.5 min-h-[44px] rounded-full transition-all duration-200 active:scale-95 ${
                       type === t.key
                         ? 'bg-accent text-black'
@@ -248,16 +267,16 @@ export default function SearchPage() {
                     }`}
                   >
                     {t.label}
-                    {typeCounts[t.key] > 0 && <span className="ml-1.5 opacity-60">{typeCounts[t.key]}</span>}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Loading skeletons */}
-            {searchQuery.isLoading && (
+            {/* Loading skeletons — a page-sized placeholder, shown for both a new
+                query and a new Type pill (each is its own request). */}
+            {(searchQuery.isLoading || isFetching) && (
               <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5">
-                {Array.from({ length: 10 }).map((_, i) => (
+                {Array.from({ length: 20 }).map((_, i) => (
                   <div key={i} className="flex flex-col gap-3">
                     <div className="skeleton w-full aspect-[2/3] rounded-xl" />
                     <div className="skeleton h-4 w-3/4 rounded" />
@@ -282,10 +301,12 @@ export default function SearchPage() {
               </div>
             )}
 
-            {/* Results grid */}
-            {!searchQuery.isLoading && !searchQuery.isError && (
+            {/* Results grid — rendered only once the query has settled, so a
+                still-loading search cannot flash "No results". */}
+            {!searchQuery.isLoading && !searchQuery.isError && !isFetching && (
               <motion.div
-                animate={{ opacity: isFetching ? 0.45 : 1 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 transition={{ duration: 0.25, ease: 'easeInOut' }}
                 className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5"
               >
@@ -334,8 +355,8 @@ export default function SearchPage() {
               </motion.div>
             )}
 
-            {/* Empty state */}
-            {!searchQuery.isLoading && !searchQuery.isError && filtered.length === 0 && (
+            {/* Empty state — same settled gate as the grid above */}
+            {!searchQuery.isLoading && !searchQuery.isError && !isFetching && filtered.length === 0 && (
               <div className="text-center py-16">
                 <p className="text-4xl mb-3">&#x1f50d;</p>
                 <p className="text-text-primary text-sm font-bold mb-2">
@@ -347,7 +368,7 @@ export default function SearchPage() {
                 <div className="flex flex-wrap justify-center gap-2">
                   {items.length > 0 && type !== 'all' && (
                     <button
-                      onClick={() => setType('all')}
+                      onClick={() => selectType('all')}
                       className="text-xs font-medium px-4 py-2 rounded-full bg-surface-elevated text-text-muted border border-zinc-800 hover:border-accent hover:text-accent transition-all"
                     >
                       Show All Types
