@@ -7,3 +7,19 @@
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# The update path must never be answered from a cache. `sw.js` is re-fetched by
+# the browser's own update check and by the app's poll; `/index.html` is what the
+# app reads to learn which hashed bundle is live (see src/utils/pwaUpdate.ts).
+# `immutable` here would pin a stale worker and a stale bundle for a year.
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache
+
+/site.webmanifest
+  Cache-Control: no-cache

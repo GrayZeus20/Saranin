@@ -48,6 +48,69 @@ Plan:
 - [x] 14. Write the development suggestions (delivered in the session report; the ranked
       shortlist lives in the chat, not in the repo)
 
+## Feature pass 4 — filter loading-first (server-side filters) + PWA self-update (2026-10-16)
+
+Request: "perbaiki bug yang dimana saat filter dijalankan langsung menampilkan contohnya anime
+padahal masih mengambil data, jadi buatkan agar loading aja dulu hingga terkumpul data cukup
+untuk 1 page lalu tampilkan. terapkan ke semua filter dan tampilan karena datanya tertulis 20
+tapi ketika saya liat hanya 19 yang tampil dan bahkan kadang sampai tak ada sama sekali" +
+"buatkan agar saya update website nya maka pwa nya juga ikut terupdate".
+
+Root cause (read in source before writing):
+- Genre + Type/Anime are **client-side** filters over one TMDB page (20 movie + 20 tv). They
+  cut the page down to a handful — often 0 — while the label kept promising a full page. Anime
+  is the worst case: `Animation + ja` is ~1 per 40 items, so "Anime" showed 0-2 tiles.
+- `placeholderData: keepPreviousData` on App/Category/Search keeps rendering the OLD page while
+  the new one loads, so a filter change showed stale (wrong-filter) tiles instead of loading.
+- `App` page 1 hides `filteredMovies[0]` behind the hero, so the label said N while the grid
+  showed N-1 — the reported "tertulis 20 tapi hanya 19 tampil".
+- `public/sw.js` registers with default `updateViaCache`, is never re-checked while a tab is
+  open, and nothing reloads the live tab after a deploy → an installed PWA kept the old bundle.
+
+Plan (1 line per step + files touched):
+- [x] 1. `src/utils/discover.ts` — server-side filter surface: `media: 'movie'|'tv'|'both'`
+      (one or both /discover kinds), `genreIds` (OR, `with_genres=a|b`), `animeOnly`
+      (`with_genres=16` + `with_original_language=ja`), plus the existing year/rating/runtime;
+      `fetchDiscoverPage` slices each kind's page to a fixed GRID_PAGE_SIZE view and reports
+      `totalPages` so one view is always a full, correctly-filtered page. `heroSlot` asks for
+      one extra title on a hero view. New `fetchCuratedPage` merges a curated movie+tv pair to
+      the same shape, so an unfiltered view keeps its real feed (Trending ≠ popularity.desc).
+- [x] 2. `src/pages/CategoryPage.tsx` — Type/Genre become query-key inputs and go server-side;
+      drop client filtering + the client now_playing re-sort; drop `keepPreviousData`; grid count
+      = what the grid renders; empty state + `isFetching` gate; unfiltered categories restored to
+      their real curated endpoints via `fetchCuratedPage` + the same `useDiscover` gate as home
+- [x] 3. `src/App.tsx` — same server-side path for the home grid (media from Type, genres,
+      animeOnly); drop `keepPreviousData`; hero keeps `filteredMovies[0]` but the results line
+      counts the grid and says `+ featured`, so the number never over-promises; default Type is
+      now `all` (the old `movie` default was itself client-filtering the merged page in half)
+- [x] 4. `src/pages/SearchPage.tsx` — drop `keepPreviousData`; Type pills pick the kind-specific
+      `/search/movie|tv` endpoint instead of client-filtering `/search/multi` (which interleaves
+      people and left ~8 tiles); page resets to 1 on a pill change; grid + empty state gated on
+      the query having settled so "No results" cannot flash mid-fetch
+- [x] 5. `src/utils/pwaUpdate.ts` (new) + `src/main.tsx` — PWA self-update:
+      `register('/sw.js', { updateViaCache: 'none' })`, poll `registration.update()` (60 s + on
+      `visibilitychange`/`online`), compare the running `/assets/js` entry hash against a
+      no-store `/index.html` fetch to catch a deploy where `sw.js` itself did not change,
+      reload once on `controllerchange`; never reloads while the tab is hidden and never on the
+      first install
+- [x] 6. `public/_headers` + `public/sw.js` — `Cache-Control: no-cache` for `/`, `/index.html`,
+      `/sw.js`, `/site.webmanifest` so the update check is never answered from the HTTP cache;
+      `SHELL_CACHE` bumped `saranin-shell-v1` → `v2` (and `/index.html` added to SHELL_ASSETS)
+      so `activate()` purges an old shell instead of serving it
+- [x] 7. Verify — all green in this pass:
+      `node --check public/sw.js` clean · `npx tsc --noEmit` clean (TSC_CLEAN) ·
+      `npm run build` green, 523 modules → `dist` · `vite preview` on :4173 ·
+      headless sweep `.scratch/filter-sweep.mjs`, **31 checks, 0 failed**: 23 views
+      (home/category/search/watchlist × default, genre, type, anime, year+rating+runtime, page 2,
+      no-results) each settle with **tile count == printed label** and **0 console errors,
+      0 poster failures**; 4 filter-click cases with the API blocked mid-flight stay at
+      **0 tiles / 20 skeletons** (the exact regression — stale tiles from the old filter);
+      4 same cases resolved to a full page with a matching label · PWA deploy test
+      `.scratch/pwa-deploy-test.mjs`, **5/5**: v1 installs and controls the page; a deploy whose
+      `sw.js` is byte-identical but whose bundle hash changed reloads onto the new entry; a deploy
+      that bumps `sw.js` reloads and purges the old shell cache (caches = `saranin-shell-v3` +
+      `saranin-img-v1` only); a first-ever visit does **not** reload
+
 ## Feature pass 2 — suggestions 1/2/3/4/5/8/10/11 + filter-scroll bug (2026-10-15)
 
 Request: implement the picked suggestions (watch deep-links, search history, more

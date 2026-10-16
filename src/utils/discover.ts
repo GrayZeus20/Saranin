@@ -1,9 +1,14 @@
-// Shared /discover machinery for watch-provider ("platform") filtering.
+// Shared /discover machinery — every filter in the grid column is applied by
+// TMDB, never by the client.
 //
-// Home and CategoryPage both offer a Netflix / Prime / … filter. The filter is
-// server-side: instead of loading a page of 20 titles and client-filtering them
-// down to nothing, we ask TMDB for titles carried by that provider in the region.
-// Keeping the request shape in one place stops the two pages drifting apart.
+// Why: the genre / platform / type / year filters used to run in the browser over
+// a single 20-item TMDB page. "Anime" is the clearest failure — Japanese animation
+// is roughly 1 item per 40, so the page was cut to 0-2 tiles while the header kept
+// promising a full page, and `keepPreviousData` painted the previous, wrong-filter
+// tiles over the wait. Server-side constraints plus a fixed GRID_PAGE_SIZE view
+// mean one rendered page is always 20 correctly-filtered titles.
+//
+// Keeping the request shape in one place stops home, category and search drifting.
 
 import { fetchWithRateLimit } from './api'
 import { normalizeMovie, normalizeTv, dedupById, type Movie } from './tmdb'
@@ -12,6 +17,8 @@ import { DEFAULT_REGION } from './region'
 export const TMDB_MAX_PAGE = 500
 export const VOTE_COUNT_FLOOR = '200' // keeps vote_average.desc from surfacing 1-vote obscurities
 export const ANIMATION_GENRE = '16' // the TV half of a combined grid strips anime
+/** One visible grid page. TMDB answers 20 per kind; a merged page is sliced to this. */
+export const GRID_PAGE_SIZE = 20
 
 export interface CombinedPage {
   items: Movie[]
@@ -30,6 +37,9 @@ export interface DiscoverSort {
   movie: string
   tv: string
 }
+
+/** Which /discover endpoints back the view: one kind, or both merged into one page. */
+export type DiscoverMedia = 'movie' | 'tv' | 'both'
 
 /** Runtime filter presets — minutes. Bands keep the UI to three pills. */
 export type RuntimeBand = 'short' | 'medium' | 'long'
@@ -62,6 +72,24 @@ export interface DiscoverOptions {
   /** with_runtime.gte / .lte in minutes */
   runtimeFrom?: number | null
   runtimeTo?: number | null
+  /** default 'both' — one merged movie+tv page */
+  media?: DiscoverMedia
+  /** genre ids, OR'd together (TMDB reads `a|b` as OR) */
+  genreIds?: number[]
+  /** Japanese animation only — with_genres=16 + with_original_language=ja */
+  animeOnly?: boolean
+  /**
+   * True when this view also renders a hero from the first item (home page 1).
+   * A merged request then targets GRID_PAGE_SIZE grid tiles PLUS the hero, so the
+   * grid is not left one short — the "says 20, shows 19" report.
+   *
+   * KNOWN TMDB LIMIT: a single-kind /discover page holds at most 20 results, and
+   * there is no page-size parameter. A movie-only or tv-only hero page therefore
+   * yields 20 titles total (1 hero + 19 tiles); drawing the 21st from TMDB page 2
+   * would duplicate that item on view page 2. The caller's label reports the two
+   * numbers separately, so the count is never wrong — only the tile count differs.
+   */
+  heroSlot?: boolean
 }
 
 export function buildDiscoverParams(opts: DiscoverOptions): URLSearchParams {
@@ -81,15 +109,35 @@ export function buildDiscoverParams(opts: DiscoverOptions): URLSearchParams {
   if (opts.ratingFloor) params.set('vote_average.gte', String(opts.ratingFloor))
   if (opts.runtimeFrom) params.set('with_runtime.gte', String(opts.runtimeFrom))
   if (opts.runtimeTo) params.set('with_runtime.lte', String(opts.runtimeTo))
+
+  // Genres. A pipe (`a|b`) is OR, a comma (`a,b`) is AND — the two cannot be
+  // mixed, so the anime case ANDs the animation genre onto the picked ones
+  // ("anime in Drama"), while the plain case ORs them.
+  const genres = [...(opts.genreIds ?? [])].filter(n => Number.isFinite(n) && n > 0)
+  if (opts.animeOnly) {
+    if (!genres.includes(Number(ANIMATION_GENRE))) genres.unshift(Number(ANIMATION_GENRE))
+    params.set('with_genres', genres.join(','))
+    params.set('with_original_language', 'ja')
+  } else if (genres.length > 0) {
+    params.set('with_genres', genres.join('|'))
+  }
   return params
 }
 
-/** One discover "page" = a movie request + a tv request, deduped into one list. */
+/**
+ * One discover "page" = GRID_PAGE_SIZE titles, all of them matching the active
+ * filters. `media: 'both'` merges a movie request and a tv request, dedupes them
+ * and slices the result back to one full page.
+ */
 export async function fetchDiscoverPage(opts: DiscoverOptions): Promise<CombinedPage> {
+  const media = opts.media ?? 'both'
+
   const build = (kind: 'movie' | 'tv') => {
     const params = buildDiscoverParams(opts)
     params.set('sort_by', opts.sort[kind])
-    if (opts.excludeAnime && kind === 'tv') params.set('without_genres', ANIMATION_GENRE)
+    // The anime strip is a TV-half concern only — and animeOnly is the one mode
+    // that must keep the animation genre.
+    if (opts.excludeAnime && !opts.animeOnly && kind === 'tv') params.set('without_genres', ANIMATION_GENRE)
     // Year bounds are per-kind date fields — movie and tv do not share one.
     const dateGte = kind === 'movie' ? 'primary_release_date.gte' : 'first_air_date.gte'
     const dateLte = kind === 'movie' ? 'primary_release_date.lte' : 'first_air_date.lte'
@@ -97,14 +145,59 @@ export async function fetchDiscoverPage(opts: DiscoverOptions): Promise<Combined
     if (opts.yearTo) params.set(dateLte, `${opts.yearTo}-12-31`)
     return `/discover/${kind}?${params.toString()}`
   }
+
+  const clampPages = (n: number) => Math.max(1, Math.min(TMDB_MAX_PAGE, n || 1))
+  // One extra title on a hero view, so slicing off the hero still leaves a full grid.
+  const takeSize = opts.heroSlot ? GRID_PAGE_SIZE + 1 : GRID_PAGE_SIZE
+
+  if (media === 'both') {
+    const [movieData, tvData] = await Promise.all([
+      fetchWithRateLimit<TMDBListResponse>(build('movie')),
+      fetchWithRateLimit<TMDBListResponse>(build('tv')),
+    ])
+    const items = dedupById(
+      (movieData.results || []).map(normalizeMovie),
+      (tvData.results || []).map(normalizeTv),
+    ).slice(0, takeSize)
+    return { items, totalPages: clampPages(Math.max(movieData.total_pages || 1, tvData.total_pages || 1)) }
+  }
+
+  const data = await fetchWithRateLimit<TMDBListResponse>(build(media))
+  // A single kind cannot exceed TMDB's 20-per-page here — see the heroSlot note.
+  const items = (data.results || [])
+    .map(media === 'tv' ? normalizeTv : normalizeMovie)
+    .slice(0, takeSize)
+  return { items, totalPages: clampPages(data.total_pages || 1) }
+}
+
+/**
+ * The curated feed page, for a view with no server-side filter active.
+ *
+ * Why this exists next to fetchDiscoverPage: /discover can only approximate the
+ * Trending row (popularity.desc is not TMDB's trending score), so the unfiltered
+ * default view keeps its real feed endpoints. As soon as any filter is on — genre,
+ * type, platform, year/rating/runtime — the view switches to /discover, which is
+ * the only surface that can express those constraints.
+ *
+ * A curated movie page and tv page are merged and sliced to one grid page, so the
+ * caller gets the same shape (and the same full-page guarantee) either way.
+ */
+export async function fetchCuratedPage(
+  movieEndpoint: string,
+  tvEndpoint: string,
+  page: number,
+  language: string,
+  opts?: { heroSlot?: boolean },
+): Promise<CombinedPage> {
   const [movieData, tvData] = await Promise.all([
-    fetchWithRateLimit<TMDBListResponse>(build('movie')),
-    fetchWithRateLimit<TMDBListResponse>(build('tv')),
+    fetchWithRateLimit<TMDBListResponse>(`${movieEndpoint}?language=${language}&page=${page}`),
+    fetchWithRateLimit<TMDBListResponse>(`${tvEndpoint}?language=${language}&page=${page}`),
   ])
+  const takeSize = opts?.heroSlot ? GRID_PAGE_SIZE + 1 : GRID_PAGE_SIZE
   const items = dedupById(
     (movieData.results || []).map(normalizeMovie),
     (tvData.results || []).map(normalizeTv),
-  )
+  ).slice(0, takeSize)
   const totalPages = Math.max(1, Math.min(TMDB_MAX_PAGE, Math.max(movieData.total_pages || 1, tvData.total_pages || 1)))
   return { items, totalPages }
 }

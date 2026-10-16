@@ -6,9 +6,13 @@
 //   image.tmdb.org → stale-while-revalidate, trimmed to a fixed entry count
 //   everything else (API calls, fonts) → straight to the network, untouched
 
-const SHELL_CACHE = 'saranin-shell-v1'
+// Bump SHELL_CACHE on any deploy that must purge previously-installed clients:
+// activate() deletes every cache whose name is not in this pair, so an old shell
+// (which references an old bundle) cannot survive an update. IMG_CACHE is
+// deliberately not bumped — posters are content-addressed by path and stay valid.
+const SHELL_CACHE = 'saranin-shell-v2'
 const IMG_CACHE = 'saranin-img-v1'
-const SHELL_ASSETS = ['/', '/favicon.svg', '/site.webmanifest']
+const SHELL_ASSETS = ['/', '/index.html', '/favicon.svg', '/site.webmanifest']
 const IMG_CACHE_LIMIT = 120
 // Hashed assets accumulate one entry per deploy in the shell cache — the image
 // trim does not touch them, so a stale build's chunks were never evicted.

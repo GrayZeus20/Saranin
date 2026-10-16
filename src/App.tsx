@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, Link, useSearchParams, useNavigationType } from 'react-router-dom'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import { toast } from 'sonner'
 import { ImageWithFallback } from './components/ImageWithFallback'
@@ -13,15 +13,15 @@ import { DiscoverFilterSections, type DiscoverFilterValue } from './components/D
 import { fetchWithRateLimit, TMDB_TOKEN } from './utils/api'
 import { tmdbImage } from './utils/imageSizes'
 import { formatDate, GENRE_MAP } from './utils/constants'
-import { normalizeMovie, normalizeTv, dedupById, type Movie } from './utils/tmdb'
+import { normalizeMovie, normalizeTv, type Movie } from './utils/tmdb'
 import { getRegionProviders } from './utils/providers'
 import { useRegion } from './utils/region'
 import { useLocale } from './utils/locale'
 import { useWatchlist } from './utils/watchlist'
 import { useDocumentTitle } from './utils/useDocumentTitle'
 import {
-  fetchDiscoverPage, runtimeRange, TMDB_MAX_PAGE,
-  type CombinedPage, type TMDBListResponse, type DiscoverSort, type RuntimeBand,
+  fetchDiscoverPage, fetchCuratedPage, runtimeRange, GRID_PAGE_SIZE,
+  type TMDBListResponse, type DiscoverSort, type DiscoverMedia, type RuntimeBand,
 } from './utils/discover'
 
 // Environment validation
@@ -47,31 +47,15 @@ const CATEGORY_SORT: Record<CategoryKey, DiscoverSort> = {
   top_rated: { movie: 'vote_average.desc', tv: 'vote_average.desc' },
 }
 
-// One request pair (movie + tv) == one visible page. No accumulation, no dedup drift:
-// each page replaces the previous one, so Prev/Next always moves forward.
-async function fetchCombinedPage(movieEndpoint: string, tvEndpoint: string, page: number, language: string): Promise<CombinedPage> {
-  const [movieData, tvData] = await Promise.all([
-    fetchWithRateLimit<TMDBListResponse>(`${movieEndpoint}?language=${language}&page=${page}`),
-    fetchWithRateLimit<TMDBListResponse>(`${tvEndpoint}?language=${language}&page=${page}`),
-  ])
-  const items = dedupById(
-    (movieData.results || []).map(normalizeMovie),
-    (tvData.results || []).map(normalizeTv),
-  )
-  const totalPages = Math.max(1, Math.min(TMDB_MAX_PAGE, Math.max(movieData.total_pages || 1, tvData.total_pages || 1)))
-  return { items, totalPages }
-}
-
 function isAnime(m: Movie): boolean {
   return !!m.genre_ids?.includes(16) && m.original_language === 'ja'
 }
 
-function matchesContentType(m: Movie, type: ContentType): boolean {
-  if (type === 'all') return true
-  if (type === 'anime') return isAnime(m)
-  // "TV Series" must not double-count anime — those belong to the Anime filter.
-  if (type === 'tv') return m.media_type === 'tv' && !isAnime(m)
-  return m.media_type === type
+// The Type pill maps onto /discover shape, not a client-side filter — same rule
+// as CategoryPage. 'tv' strips anime server-side; 'anime' is genre 16 + ja.
+function mediaOf(type: ContentType): DiscoverMedia {
+  if (type === 'movie' || type === 'tv') return type
+  return 'both'
 }
 
 function SkeletonCard() {
@@ -80,20 +64,6 @@ function SkeletonCard() {
       <div className="skeleton w-full aspect-[2/3] rounded-xl" />
       <div className="skeleton h-5 w-3/4 rounded" />
       <div className="skeleton h-3 w-1/2 rounded" />
-    </div>
-  )
-}
-
-function SkeletonHero() {
-  return (
-    <div className="relative w-full h-[50vh] sm:h-[60vh] md:h-[75vh] mb-12 md:mb-16">
-      <div className="skeleton absolute inset-0 rounded-xl md:rounded-2xl" />
-      <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-8 md:p-12">
-        <div className="skeleton h-4 w-24 rounded mb-4" />
-        <div className="skeleton h-8 sm:h-12 w-2/3 rounded mb-3" />
-        <div className="skeleton h-4 w-1/2 rounded mb-6" />
-        <div className="skeleton h-10 w-32 rounded-full" />
-      </div>
     </div>
   )
 }
@@ -214,7 +184,11 @@ export default function App() {
   const rawPlatform = Number(searchParams.get('provider'))
   const activePlatform = Number.isFinite(rawPlatform) && rawPlatform > 0 ? rawPlatform : null
   const rawType = searchParams.get('type')
-  const contentType: ContentType = rawType === 'movie' || rawType === 'tv' || rawType === 'anime' || rawType === 'all' ? rawType : 'movie'
+  // 'all' is the default view. The previous default was 'movie', which then had
+  // the merged movie+tv page filtered down to movies in the browser — a 20-item
+  // page rendered as ~10 tiles, and in a genre/date-heavy week as none. 'all'
+  // asks for both kinds server-side, so the page that arrives is the page shown.
+  const contentType: ContentType = rawType === 'movie' || rawType === 'tv' || rawType === 'anime' || rawType === 'all' ? rawType : 'all'
 
   // --- Discover filters: year / rating floor / runtime ---
   // Validated like every other URL value — a hand-edited `year=abc` must not
@@ -323,22 +297,33 @@ export default function App() {
 
   const gridTopRef = useRef<HTMLDivElement>(null)
 
-  // --- Current page query: exactly one TMDB page per view ---
-  // The discover path is used whenever the request cannot be expressed by the
-  // plain list endpoints: a platform filter, or any of the year/rating/runtime
-  // filters (those exist only on /discover).
+  // --- Current page query: exactly one full page per view ---
+  // Two sources, one guarantee (a full, correctly-filtered page):
+  //   • any filter on (genre / type / platform / year / rating / runtime) → /discover,
+  //     the only endpoint that can express those constraints server-side.
+  //   • no filter at all → the curated feed endpoints, because /discover can only
+  //     approximate Trending (popularity.desc ≠ TMDB's trending score) and the
+  //     default view must be the real thing.
+  // Either way, nothing is filtered down in the browser afterwards — that client
+  // pass is what used to leave 19 tiles (or zero) under a "20" label.
   const endpoints = CATEGORY_ENDPOINTS[activeCategory] ?? CATEGORY_ENDPOINTS.now_playing
-  const useDiscover = activePlatform !== null || hasDiscoverFilters
+  const media = mediaOf(contentType)
+  const animeOnly = contentType === 'anime'
+  const useDiscover = activePlatform !== null || hasDiscoverFilters || contentType !== 'all' || activeGenres.length > 0
   const runtime = runtimeBand ? runtimeRange(runtimeBand) : { from: null, to: null }
   const pageQuery = useQuery({
-    queryKey: ['home', activeCategory, currentPage, activePlatform, region, locale, yearFrom, yearTo, ratingFloor, runtimeBand],
+    // Every constraint is part of the key: changing one is a new fetch, never a
+    // re-render of the previous filter's page.
+    queryKey: ['home', activeCategory, currentPage, activePlatform, region, locale, yearFrom, yearTo, ratingFloor, runtimeBand, media, animeOnly, activeGenres.join(',')],
     queryFn: () => useDiscover
       ? fetchDiscoverPage({
           sort: CATEGORY_SORT[activeCategory] ?? CATEGORY_SORT.now_playing,
           providerIds: activePlatform !== null ? [activePlatform] : [],
           page: currentPage,
           voteFloor: activeCategory === 'top_rated',
-          excludeAnime: true,
+          // Only the Anime view keeps genre 16; every merged view strips it so
+          // "TV Series" and "Anime" stay disjoint.
+          excludeAnime: !animeOnly,
           region,
           language: locale,
           yearFrom,
@@ -346,9 +331,15 @@ export default function App() {
           ratingFloor,
           runtimeFrom: runtime.from,
           runtimeTo: runtime.to,
+          media,
+          genreIds: activeGenres,
+          animeOnly,
+          // Page 1 spends one title on the hero — ask for a full grid underneath it.
+          heroSlot: currentPage === 1,
         })
-      : fetchCombinedPage(endpoints.movie, endpoints.tv, currentPage, locale),
-    placeholderData: keepPreviousData,
+      : fetchCuratedPage(endpoints.movie, endpoints.tv, currentPage, locale, { heroSlot: currentPage === 1 }),
+    // No placeholderData: the previous page belongs to a different filter, and
+    // painting it over the wait is the reported bug. Skeletons until it lands.
     retry: 2,
     retryDelay: 1000,
   })
@@ -363,19 +354,22 @@ export default function App() {
   const platformOptions = regionProviders ?? []
 
   // --- Row previews: fixed page 1, movie + tv per row ---
+  // These rows are always the curated feeds; they are not filtered, so they never
+  // need the /discover path. fetchWithRateLimit de-dupes identical in-flight GETs,
+  // so a row that matches the grid's own request costs nothing extra.
   const trendingRow = useQuery({
     queryKey: ['row', 'trending', locale],
-    queryFn: () => fetchCombinedPage('/trending/movie/week', '/trending/tv/week', 1, locale),
+    queryFn: () => fetchCuratedPage('/trending/movie/week', '/trending/tv/week', 1, locale),
     retry: 2,
   })
   const popularRow = useQuery({
     queryKey: ['row', 'popular', locale],
-    queryFn: () => fetchCombinedPage('/movie/popular', '/tv/popular', 1, locale),
+    queryFn: () => fetchCuratedPage('/movie/popular', '/tv/popular', 1, locale),
     retry: 2,
   })
   const topRatedRow = useQuery({
     queryKey: ['row', 'top_rated', locale],
-    queryFn: () => fetchCombinedPage('/movie/top_rated', '/tv/top_rated', 1, locale),
+    queryFn: () => fetchCuratedPage('/movie/top_rated', '/tv/top_rated', 1, locale),
     retry: 2,
   })
 
@@ -415,30 +409,25 @@ export default function App() {
     navigate(`/${movie.media_type === 'tv' ? 'tv' : 'movie'}/${movie.id}`)
   }, [navigate])
 
-  const typeFilteredItems = useMemo(
-    () => pageItems.filter(m => matchesContentType(m, contentType)),
-    [pageItems, contentType]
-  )
-
-  const availableGenres = useMemo(() => [...new Set(typeFilteredItems.flatMap(m => m.genre_ids || []))]
+  // Genres for the pill rail, derived from the current page plus whatever is
+  // already selected (a selected pill must always be rendered so it can be
+  // toggled back off, even if no title on this page carries that genre).
+  const availableGenres = useMemo(() => [...new Set([...pageItems.flatMap(m => m.genre_ids || []), ...activeGenres])]
     .map(id => ({ id, name: GENRE_MAP[id] }))
     .filter(g => g.name)
-    .sort((a, b) => a.name.localeCompare(b.name)), [typeFilteredItems])
+    .sort((a, b) => a.name.localeCompare(b.name)), [pageItems, activeGenres])
 
-  // Platform is filtered server-side (see fetchDiscoverPage); only genre + type
-  // are applied client-side here so the pills stay instant.
+  // Genre, type, platform and the year/rating/runtime constraints are all applied
+  // by TMDB (see the pageQuery above), so the page that arrives is the final one.
+  // The only local ordering is Now Playing: discover sorts the two halves but the
+  // merged feed interleaves them, and a plain string sort keeps ISO dates
+  // chronological (Date.getTime() on a date-only value shifts by timezone).
   const filteredMovies = useMemo(() => {
-    const list = pageItems.filter(m => {
-      const genreMatch = activeGenres.length === 0 || m.genre_ids?.some(id => activeGenres.includes(id))
-      return genreMatch && matchesContentType(m, contentType)
-    })
-    if (activeCategory === 'now_playing' && activePlatform === null) {
-      // ISO date strings (YYYY-MM-DD) sort chronologically as plain strings; using
-      // Date.getTime() on a date-only ISO value parses it as UTC and can reorder by TZ.
-      return [...list].sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''))
+    if (activeCategory === 'now_playing' && media === 'both') {
+      return [...pageItems].sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''))
     }
-    return list
-  }, [pageItems, activeGenres, contentType, activeCategory, activePlatform])
+    return pageItems
+  }, [pageItems, activeCategory, media])
 
   // Hero only exists on page 1; pages 2+ render every fetched item in the grid.
   const isFirstPage = currentPage === 1
@@ -488,7 +477,8 @@ export default function App() {
   }, [updateParams])
 
   const setContentTypeFilter = useCallback((type: ContentType) => {
-    updateParams({ type: type === 'movie' ? null : type })
+    // 'all' is the default view, so it drops the param rather than writing it.
+    updateParams({ type: type === 'all' ? null : type })
   }, [updateParams])
 
   // Year / rating / runtime are server-side constraints, so any change starts a
@@ -513,9 +503,9 @@ export default function App() {
     })
   }, [updateParams])
 
-  // 'movie' is the default view, not a filter — counting it showed a badge of 1
-  // on a pristine home. Deviation from the default is what counts.
-  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'movie' ? 1 : 0) + discoverFilterCount
+  // 'all' is the default view, not a filter — counting it showed a badge of 1 on
+  // a pristine home. Deviation from the default is what counts.
+  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'all' ? 1 : 0) + discoverFilterCount
   // `activeFilterCount` drives the badge; the Reset control must also appear when
   // only the category moved, since resetFilters clears that too.
   const hasActiveFilters = activeFilterCount > 0 || activeCategory !== 'now_playing'
@@ -567,20 +557,11 @@ export default function App() {
     )
   }
 
-  if (isPageLoading) {
-    return (
-      <div className="min-h-[100dvh] bg-surface px-4 sm:px-6 md:px-12 py-6 max-w-[1400px] mx-auto">
-        <header className="mb-10">
-          <div className="skeleton h-8 w-36 rounded mb-2" />
-          <div className="skeleton h-3 w-48 rounded" />
-        </header>
-        <SkeletonHero />
-        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5">
-          {Array.from({ length: 10 }).map((_, i) => <SkeletonCard key={i} />)}
-        </div>
-      </div>
-    )
-  }
+  // NOTE: there is deliberately no full-page skeleton gate here. A filter change
+  // is now a fetch with no placeholder data, so `isLoading` is true for every
+  // filter interaction — an early `return` would unmount the navbar and the open
+  // filter panel the user is still clicking in. The chrome and the rails stay
+  // mounted; only the grid below swaps to skeletons (see the grid block).
 
   return (
     <div className="min-h-[100dvh] bg-surface">
@@ -736,7 +717,15 @@ export default function App() {
             <div>
               <h3 className="text-lg sm:text-xl font-bold text-text-primary">{endpoints.label}</h3>
               <p className="text-text-muted text-xs sm:text-sm mt-1">
-                {filteredMovies.length} results on this page
+                {/* Page 1 spends one title on the hero, so the grid renders one
+                    fewer than the page holds. Saying only the page total is what
+                    produced the "says 20, shows 19" report — the count names the
+                    grid and the hero is called out beside it. */}
+                {isPageFetching
+                  ? 'Loading…'
+                  : filteredMovies.length === 0
+                    ? 'No results on this page'
+                    : `${gridMovies.length} in grid${featured ? ' + 1 featured' : ''}`}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -918,12 +907,19 @@ export default function App() {
           </AnimatePresence>
         </motion.div>
 
-        {/* Movie Grid — one TMDB page per view */}
+        {/* Movie Grid — one full page per view. A filter change is a new query
+            with no placeholderData, so there is no data for the key yet: the grid
+            shows skeletons and only paints once its own page has landed. */}
         <motion.div
-          animate={{ opacity: isPageFetching ? 0.45 : 1 }}
+          animate={{ opacity: isPageFetching && !isPageLoading ? 0.45 : 1 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
         >
-          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-8">
+          {isPageLoading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-8">
+              {Array.from({ length: GRID_PAGE_SIZE }).map((_, i) => <SkeletonCard key={`grid-skeleton-${i}`} />)}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-8">
             {gridMovies.map((movie, i) => (
               <motion.article
                 key={`${activeCategory}-${movie.media_type ?? 'movie'}-${movie.id}`}
@@ -997,6 +993,7 @@ export default function App() {
               </motion.article>
             ))}
           </div>
+          )}
         </motion.div>
 
         {/* Pagination — Prev / Next only. One page in view at a time. */}
@@ -1027,8 +1024,9 @@ export default function App() {
           </button>
         </motion.div>
 
-        {/* Empty state with smart suggestions */}
-        {filteredMovies.length === 0 && (
+        {/* Empty state with smart suggestions — gated on the fetch having settled,
+            otherwise a page that is still loading flashes "No results". */}
+        {filteredMovies.length === 0 && !isPageLoading && !isPageFetching && (
           <div className="text-center py-16">
             <p className="text-4xl mb-3">&#x1f50d;</p>
             <p className="text-text-primary text-sm font-bold mb-2">No results on this page</p>

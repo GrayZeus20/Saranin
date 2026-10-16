@@ -1,23 +1,22 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useParams, Link, useSearchParams, useNavigationType } from 'react-router-dom'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import { ImageWithFallback } from '../components/ImageWithFallback'
 import { TrailerHover } from '../components/TrailerHover'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import { WatchButton } from '../components/WatchButton'
-import { fetchWithRateLimit } from '../utils/api'
 import { tmdbImage } from '../utils/imageSizes'
 import { GENRE_MAP, formatDate } from '../utils/constants'
-import { normalizeMovie, normalizeTv, dedupById, type Movie } from '../utils/tmdb'
+import { type Movie } from '../utils/tmdb'
 import { getRegionProviders } from '../utils/providers'
 import { useRegion } from '../utils/region'
 import { useLocale } from '../utils/locale'
 import { useDocumentTitle } from '../utils/useDocumentTitle'
 import {
-  fetchDiscoverPage, runtimeRange, TMDB_MAX_PAGE,
-  type CombinedPage, type TMDBListResponse, type DiscoverSort, type RuntimeBand,
+  fetchDiscoverPage, fetchCuratedPage, runtimeRange, GRID_PAGE_SIZE,
+  type CombinedPage, type DiscoverSort, type DiscoverMedia, type RuntimeBand,
 } from '../utils/discover'
 import { DiscoverFilterSections, type DiscoverFilterValue } from '../components/DiscoverFilterSections'
 
@@ -30,7 +29,10 @@ const TITLES: Record<string, string> = {
   now_playing: 'Now Playing',
 }
 
-// Map category to both movie and TV endpoints
+// Curated feeds for the unfiltered view — /discover can only approximate Trending
+// (popularity.desc is not TMDB's trending score), so a pristine category page keeps
+// the real endpoints. Any active filter switches the view to /discover (App.tsx
+// documents the same split).
 const ENDPOINT_MAP: Record<string, { movie: string; tv: string }> = {
   trending: { movie: '/trending/movie/week', tv: '/trending/tv/week' },
   popular: { movie: '/movie/popular', tv: '/tv/popular' },
@@ -50,13 +52,12 @@ function isAnime(m: Movie): boolean {
   return !!m.genre_ids?.includes(16) && m.original_language === 'ja'
 }
 
-// Single source of truth for the Type filter. "TV Series" excludes anime so an
-// anime show is not listed under both TV Series and Anime.
-function matchesType(m: Movie, type: ContentType): boolean {
-  if (type === 'all') return true
-  if (type === 'anime') return isAnime(m)
-  if (type === 'tv') return m.media_type === 'tv' && !isAnime(m)
-  return m.media_type === type
+// The Type pill maps onto /discover shape, not a client-side filter. Movies and
+// TV Series ask for a single kind (so "TV Series" can strip anime server-side);
+// Anime asks for the animation genre + Japanese language; All merges both.
+function mediaOf(type: ContentType): DiscoverMedia {
+  if (type === 'movie' || type === 'tv') return type
+  return 'both'
 }
 
 export default function CategoryPage() {
@@ -77,7 +78,9 @@ export default function CategoryPage() {
   const rawPlatform = Number(searchParams.get('provider'))
   const activePlatform = Number.isFinite(rawPlatform) && rawPlatform > 0 ? rawPlatform : null
   const rawType = searchParams.get('type')
-  const contentType: ContentType = rawType === 'movie' || rawType === 'tv' || rawType === 'anime' || rawType === 'all' ? rawType : 'movie'
+  // 'all' is the default view — see the App.tsx note. A 'movie' default meant the
+  // merged page was client-filtered down to movies, shrinking 20 tiles to ~10.
+  const contentType: ContentType = rawType === 'movie' || rawType === 'tv' || rawType === 'anime' || rawType === 'all' ? rawType : 'all'
   const [showFilters, setShowFilters] = useState(false)
 
   // --- Discover filters: year / rating floor / runtime ---
@@ -113,29 +116,37 @@ export default function CategoryPage() {
   }, [setSearchParams])
 
   const categoryKey = type || 'popular'
-  const endpoints = ENDPOINT_MAP[categoryKey] || ENDPOINT_MAP.popular
   const sort = CATEGORY_SORT[categoryKey] || CATEGORY_SORT.popular
+  // 'TV Series' means movie-only or tv-only; 'All' merges both; 'Anime' constrains
+  // the query itself. Every value is applied by TMDB, so a page is never cut down
+  // after arrival.
+  const media = mediaOf(contentType)
+  const animeOnly = contentType === 'anime'
   const { region } = useRegion()
   const { locale } = useLocale()
 
   useDocumentTitle(`${TITLES[categoryKey] || 'Popular'} — SARANIN.`)
 
-  const useDiscover = activePlatform !== null || hasDiscoverFilters
   const runtime = runtimeBand ? runtimeRange(runtimeBand) : { from: null, to: null }
+  // Same split as the home page. /discover can only approximate a curated row
+  // (popularity.desc is not TMDB's trending score), so an unfiltered category view
+  // keeps its real feed pair. The moment any constraint is on, the view moves to
+  // /discover — the only surface that can express it server-side. A client pass
+  // after arrival is what used to leave the grid short of its own label.
+  const endpoints = ENDPOINT_MAP[categoryKey] ?? ENDPOINT_MAP.popular
+  const useDiscover = activePlatform !== null || hasDiscoverFilters || contentType !== 'all' || activeGenres.length > 0
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
-    // activePlatform drives a different data source, so it belongs in the key;
-    // region does too, because the provider ids only mean something in one region.
-    queryKey: ['category', type, page, activePlatform, region, locale, yearFrom, yearTo, ratingFloor, runtimeBand],
-    queryFn: async (): Promise<CombinedPage> => {
-      // Platform or year/rating/runtime picked → server-side /discover so the
-      // grid actually fills.
-      if (useDiscover) {
-        return fetchDiscoverPage({
+    // Every server-side constraint belongs in the key: a filter change must be a
+    // new fetch, never a re-render of the old (wrong-filter) page.
+    queryKey: ['category', type, page, activePlatform, region, locale, yearFrom, yearTo, ratingFloor, runtimeBand, media, animeOnly, activeGenres.join(',')],
+    queryFn: async (): Promise<CombinedPage> => useDiscover
+      ? fetchDiscoverPage({
           sort,
           providerIds: activePlatform !== null ? [activePlatform] : [],
           page,
           voteFloor: categoryKey === 'top_rated',
-          excludeAnime: true,
+          // Only strip anime when the view is not itself the anime view.
+          excludeAnime: !animeOnly,
           region,
           language: locale,
           yearFrom,
@@ -143,20 +154,13 @@ export default function CategoryPage() {
           ratingFloor,
           runtimeFrom: runtime.from,
           runtimeTo: runtime.to,
+          media,
+          genreIds: activeGenres,
+          animeOnly,
         })
-      }
-      const [movieData, tvData] = await Promise.all([
-        fetchWithRateLimit<TMDBListResponse>(`${endpoints.movie}?language=${locale}&page=${page}`),
-        fetchWithRateLimit<TMDBListResponse>(`${endpoints.tv}?language=${locale}&page=${page}`),
-      ])
-      const items = dedupById(
-        (movieData.results || []).map(normalizeMovie),
-        (tvData.results || []).map(normalizeTv),
-      )
-      const totalPages = Math.max(1, Math.min(TMDB_MAX_PAGE, Math.max(movieData.total_pages || 1, tvData.total_pages || 1)))
-      return { items, totalPages }
-    },
-    placeholderData: keepPreviousData,
+      : fetchCuratedPage(endpoints.movie, endpoints.tv, page, locale),
+    // No placeholderData: the previous page belongs to a different filter. Showing
+    // it is the reported bug — the grid must show skeletons until its own data lands.
     retry: 2,
     retryDelay: 1000,
   })
@@ -192,37 +196,29 @@ export default function CategoryPage() {
 
   const enrichedMovies = allMovies
 
+  // Every filter is already applied server-side (genre, type, platform, year,
+  // rating, runtime), so what arrives IS the page. The only local ordering is
+  // Now Playing, whose discover sort covers the movie half but not the merged
+  // feed's interleave — a plain string sort keeps ISO dates chronological.
   const filteredMovies = useMemo(() => {
-    const filtered = enrichedMovies.filter(m => {
-      const genreMatch = activeGenres.length === 0 || m.genre_ids?.some(id => activeGenres.includes(id))
-      return genreMatch && matchesType(m, contentType)
-    })
-    // Now Playing is the one category whose feed order needs overriding (TMDB's
-    // now_playing feed is popularity-ordered, not date-ordered). Top Rated must
-    // keep the endpoint's vote_average.desc — the old unconditional re-sort
-    // silently replaced it with newest-first.
-    if (categoryKey === 'now_playing' && activePlatform === null) {
-      // ISO date strings sort chronologically as strings — avoids the TZ shift of Date.getTime().
-      return [...filtered].sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''))
+    if (categoryKey === 'now_playing' && media === 'both') {
+      return [...enrichedMovies].sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''))
     }
-    return filtered
-  }, [enrichedMovies, activeGenres, contentType, categoryKey, activePlatform])
+    return enrichedMovies
+  }, [enrichedMovies, categoryKey, media])
 
-  // Filter by contentType first to compute available genres dynamically
-  const typeFilteredMovies = useMemo(
-    () => enrichedMovies.filter(m => matchesType(m, contentType)),
-    [enrichedMovies, contentType]
-  )
-
+  // Genres for the pill rail. Derived from the current page's unfiltered type
+  // view, so the pills always reflect the catalogue the user is standing in.
   const availableGenres = useMemo(() => {
     const genreIds = new Set<number>()
-    typeFilteredMovies.forEach(m => m.genre_ids?.forEach(id => genreIds.add(id)))
+    enrichedMovies.forEach(m => m.genre_ids?.forEach(id => genreIds.add(id)))
+    activeGenres.forEach(id => genreIds.add(id)) // a selected genre must keep its pill
     return [...genreIds].map(id => ({ id, name: GENRE_MAP[id] })).filter(g => g.name).sort((a, b) => a.name.localeCompare(b.name))
-  }, [typeFilteredMovies])
+  }, [enrichedMovies, activeGenres])
 
-  // 'movie' is the default view here too, not a filter — counting it showed a
-  // badge of "1" on a pristine category page and a Reset that reset nothing.
-  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'movie' ? 1 : 0) + discoverFilterCount
+  // 'all' is the default view here too, not a filter — counting it showed a badge
+  // of "1" on a pristine category page and a Reset that reset nothing.
+  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'all' ? 1 : 0) + discoverFilterCount
 
   // Single-select platform — 'All' clears it and returns to the category feed.
   const selectPlatform = useCallback((id: number | null) => {
@@ -444,7 +440,7 @@ export default function CategoryPage() {
                   ] as { key: ContentType; label: string }[]).map(t => (
                     <button
                       key={t.key}
-                      onClick={() => updateParams({ type: t.key === 'movie' ? null : t.key })}
+                      onClick={() => updateParams({ type: t.key === 'all' ? null : t.key })}
                       className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                         contentType === t.key
                           ? 'bg-accent text-black'
@@ -460,19 +456,26 @@ export default function CategoryPage() {
           )}
         </AnimatePresence>
 
-        {/* Results count */}
+        {/* Results count — the grid shows exactly what is counted here. */}
         <p className="text-text-muted text-xs mb-4">
-          {filteredMovies.length} results on this page
+          {isFetching
+            ? 'Loading…'
+            : filteredMovies.length > 0
+              ? `${filteredMovies.length} results on this page`
+              : 'No results on this page'}
         </p>
 
-        {/* Movie Grid — one TMDB page per view */}
+        {/* Movie Grid — one TMDB page per view. A filter change is a new key with
+            no cached data, so `isLoading` is true and the grid shows skeletons;
+            stale tiles from the previous filter are never painted. A same-key
+            refetch keeps `isLoading` false and its (valid) data on screen, dimmed. */}
         <motion.div
-          animate={{ opacity: isFetching ? 0.45 : 1 }}
+          animate={{ opacity: isFetching && !isLoading ? 0.45 : 1 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
         >
           {isLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-              {Array.from({ length: 20 }).map((_, i) => (
+              {Array.from({ length: GRID_PAGE_SIZE }).map((_, i) => (
                 <div key={`skeleton-${i}`} className="flex flex-col gap-3">
                   <div className="skeleton w-full aspect-[2/3] rounded-xl" />
                   <div className="skeleton h-4 w-3/4 rounded" />
@@ -510,8 +513,9 @@ export default function CategoryPage() {
           )}
         </motion.div>
 
-        {/* Empty state with smart suggestions */}
-        {filteredMovies.length === 0 && !isLoading && (
+        {/* Empty state with smart suggestions — only once the fetch has settled,
+            so an in-flight page cannot flash "No results". */}
+        {filteredMovies.length === 0 && !isLoading && !isFetching && (
           <div className="text-center py-16">
             <p className="text-4xl mb-3">&#x1f50d;</p>
             <p className="text-text-primary text-sm font-bold mb-2">No results on this page</p>
