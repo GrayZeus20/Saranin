@@ -9,6 +9,13 @@
 // the image: later siblings (gradients, badges, watch buttons) are positioned
 // with z-index:auto/0 in the same stacking context, and an explicit z would
 // lift the video above the card chrome.
+//
+// While a preview plays, two affordances paint above the video:
+//   • a pause glyph (top-left) — the snippet is muted and stops by itself;
+//     the icon says "this is a preview, not the player"
+//   • the title bar (bottom) — supplied by the host card, which is why the
+//     video never paints over the card's own caption
+// Both are rendered here so every card gets them for free.
 
 import { useEffect, useRef } from 'react'
 import { useTrailerHover } from '../utils/trailer'
@@ -50,6 +57,23 @@ export function TrailerHover({ mediaType, id, title, zoomClass = 'scale-[1.35]' 
           allow="autoplay; encrypted-media"
           className={`absolute inset-0 w-full h-full ${zoomClass}`}
         />
+      )}
+      {/* Preview chrome — painted only while the video is, so a static poster
+          never shows a phantom pause button. The pause glyph fills the same
+          corner the WatchButton badge fills (top-left), so it yields: the
+          glyph sits bottom-left instead. */}
+      {videoKey && (
+        <>
+          <span className="absolute bottom-1.5 left-1.5 grid h-6 w-6 place-items-center rounded-full bg-black/70 backdrop-blur-sm text-white">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="5" width="4" height="14" rx="1" />
+              <rect x="14" y="5" width="4" height="14" rx="1" />
+            </svg>
+          </span>
+          <span className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent px-2 py-1.5 text-[10px] font-bold text-white line-clamp-1">
+            {title}
+          </span>
+        </>
       )}
     </div>
   )

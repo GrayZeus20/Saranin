@@ -74,10 +74,13 @@ export function AvailabilityModal({ open, regions, title, onClose }: {
             {/* The scrollable body. overscroll-contain keeps a flick at the end
                 of this list from scrolling the page behind the modal. */}
             <div className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-3">
-              {regions.map(({ code, name, flag, link, providers }) => (
+              {regions.map(({ code, name, link, providers }) => (
                 <div key={code} className="bg-surface-card border border-zinc-800/70 rounded-xl p-3 sm:p-4">
                   <div className="flex items-center gap-2 mb-2.5">
-                    <span className="text-lg" aria-hidden="true">{flag}</span>
+                    {/* Flag + code doubled on Windows (no color flag font, so
+                        the emoji paints as its two regional letters — 🇮🇩 +
+                        "ID" read "ID ID"). The name alone carries the country;
+                        the code chip stays as the data anchor. */}
                     <span className="text-text-primary text-sm font-bold truncate">{name}</span>
                     <span className="text-text-muted text-[10px] font-mono shrink-0">{code}</span>
                     {link && (

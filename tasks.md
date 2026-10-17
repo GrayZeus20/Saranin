@@ -1,5 +1,72 @@
 # Tasks
 
+## Feature pass 5 — drama presets, age filter, latin titles, navbar/chrome fixes (2026-10-17)
+
+Request: "filter platform netflix/prime/viu/wetv/bstation · Sinetron drakor dracin · fitur search
+masih ketutup ga responsif · Navbar nya jelek nempel di div bukan body · Nama lain dari judul
+film ada yang bahasa korea cina buatkan judul versi latin · Preview ada pause + judul + popup
+detail di card · Ketika card di zoom judul film tertutup · Filter 18+ dan all age · Filter
+region lock tertulis double untuk id (cukup 1)."
+
+Method: every claim was first reproduced or refuted in a live headless Chromium against the dev
+server AND against the TMDB API itself (certification lists, discover shapes, alternative_titles,
+region provider catalogs). Nothing was implemented from the report text alone.
+
+Plan (1 line per step + files touched):
+- [x] 1. `src/utils/discover.ts` — `originCountries` (`with_origin_country`, OR'd) +
+      `ageBand` ('all' → US cert lte PG-13/TV-PG, 'adult' → gte R/TV-MA). TMDB's `adult`
+      flag is false on EVERY discover result (verified live), so certifications are the only
+      working 18+ constraint; both shapes return 19k/12k titles on the live API.
+- [x] 2. `src/App.tsx` + `src/pages/CategoryPage.tsx` — Drama presets Sinetron (ID) /
+      Drakor (KR) / Dracin (CN) as a new URL dimension (`?drama=`), single-select, implies
+      Type=tv; Age Rating pills (All Ages / 18+ / Any) ride the existing discover-filter
+      writer; both reset cleanly with category/platform/reset-all.
+- [x] 3. `src/components/DiscoverFilterSections.tsx` — Age Rating section (shared renderer,
+      so home and category can never drift).
+- [x] 4. `src/utils/providers.ts` — FEATURED_ORDER gains Viu/WeTV/Bstation/Bilibili/iQIYI/
+      Viki/Crunchyroll/iflix + case-insensitive name matching (TMDB spells the same service
+      'VIU' vs 'Viu' per region, and the case-sensitive lookup silently dropped the pill).
+      Bstation is absent from TMDB's ID catalog (verified) — it appears only where the
+      provider actually exists; the pills always follow the region's real catalog.
+- [x] 5. `src/components/Navbar.tsx` — search debounce 400→250ms, and a settled zero-result
+      query now keeps the panel open with a real "No title matches … Press Enter" message
+      instead of silently closing (the "search ketutup / ga responsif" report).
+- [x] 6. `src/components/Navbar.tsx` — navbar is `fixed` + full-bleed (outside the
+      `max-w-[1400px]` page container, with a body-level spacer): the bar and its border
+      now span the whole body instead of stopping at the content gutters ("nempel di div").
+- [x] 7. Flag-emoji doubling — Windows Chromium has no color flag font, so 🇮🇩 painted as
+      the letters "ID" next to the code "ID" (the "region lock dobel" report). `Navbar`
+      region button, `RegionFlagRail` chip and `AvailabilityModal` rows now carry the code
+      or the name alone; flags stay where a name disambiguates them.
+- [x] 8. `src/pages/MovieDetailPage.tsx` — LATIN title line: `alternative_titles` is fetched
+      per title; when the original title is Hangul/Hanzi/Kana (regex-detected), the
+      romanized entry (TMDB type "Revised romanization" or any Latin alt from the origin
+      country) renders under a "Latin" label, and the original script under "Original".
+      Squid Game → Latin "Ojingeo Geim" / Original 오징어 게임 (verified live). Titles with
+      no recorded romanization just show the original line.
+- [x] 9. `src/pages/MovieDetailPage.tsx` — US age badge from `release_dates` /
+      `content_ratings`: R/NC-17/TV-MA render a red "18+", other certs render neutral.
+- [x] 10. `src/components/TrailerHover.tsx` — while a preview plays, a pause glyph
+      (bottom-left) and the title bar (top) paint above the video, so the preview states
+      what it is. (Both only render while the video does.)
+- [x] 11. `src/components/CardDetailPopup.tsx` (new) + home/search grids — hover popup
+      (desktop) with rating, year, genres, synopsis and an "Open details" link, fed from
+      data the grid already holds (zero extra requests), opening after a 300ms rest.
+- [x] 12. Caption clipping ("judul tertutup saat zoom") — grid captions moved OUT of the
+      `overflow-hidden` poster box (they used to sit inside it and were cropped by the
+      card's hover-scale); they now grow the card instead. Home + search grids.
+- [x] 13. `src/components/ImageWithFallback.tsx` — React 18 warns on `fetchPriority`
+      (camelCase); the DOM attribute is now passed lowercase, killing the console warning
+      the sweep surfaced.
+- [x] 14. Verify — all green in this pass:
+      `tsc --noEmit` clean · `npm run build` green (11 chunks) · `npm run test:drag` 9/9 ·
+      headless desktop (1440) + mobile (390) sweeps: navbar full-bleed (1434/1440 = scrollbar
+      only), region pill reads "ID" once, filter panel shows Category/Genre/Year/Rating/
+      Runtime/Age Rating/Platform/Drama/Type, Drakor pill → grid of Korean dramas (URL
+      `?drama=drakor&type=tv`), +18+ → mature KDramas (`&age=adult`), card popup opens with
+      rating/genre/synopsis, hover preview shows pause + title chrome, empty search keeps its
+      panel open with the Enter hint, 0 console errors on every sweep.
+
 ## Deepscan + fix UI/feature/image bugs (2026-10-15)
 
 Request: "deepscan dan perbaiki bug ui dan fitur yang ada termasuk gambar yang error lalu

@@ -14,20 +14,31 @@ interface ProviderCatalogResponse {
 }
 
 // Priority order for the filter bar. Only providers actually available in the
-// region are shown; the rest are ignored. Netflix / Prime / Disney+ come first.
+// region are shown; the rest are ignored. Netflix / Prime / Disney+ come first,
+// then the Asian streamers the catalogue is browsed for (Viu, WeTV, iQIYI,
+// Bstation…) — a name only appears when TMDB lists it for the region, so
+// Bstation is absent from e.g. the ID catalog by TMDB's own data.
 const FEATURED_ORDER = [
   'Netflix',
   'Amazon Prime Video',
   'Disney Plus',
+  'Disney+',
+  'Disney+ Hotstar',
   'Apple TV Plus',
   'Max',
   'HBO Max',
   'Hulu',
-  'Disney+ Hotstar',
   'Vidio',
-  'VIU',
+  'Viu',
+  'WeTV',
+  'Bstation',
+  'Bilibili',
   'iQIYI',
+  'Rakuten Viki',
+  'Viki',
   'Catchplay',
+  'Crunchyroll',
+  'iflix',
   'beIN Sports',
   'Paramount Plus',
   'Apple TV',
@@ -62,12 +73,16 @@ export function getRegionProviders(region: string = DEFAULT_REGION, language: st
         provider_name: p.provider_name,
         logo_path: p.logo_path,
       }))
-      const byName = new Map(all.map(p => [p.provider_name, p]))
+      // Name matching is case-insensitive: TMDB spells the same service
+      // differently per region ('VIU' vs 'Viu'), and a case-sensitive lookup
+      // silently dropped the pill for that region.
+      const lowerName = new Map(all.map(p => [p.provider_name.toLowerCase(), p]))
       const featured: CatalogEntry[] = []
-      for (const name of FEATURED_ORDER) {
-        const match = byName.get(name)
+      const push = (name: string) => {
+        const match = lowerName.get(name.toLowerCase())
         if (match && !featured.some(f => f.provider_id === match.provider_id)) featured.push(match)
       }
+      for (const name of FEATURED_ORDER) push(name)
       const featuredIds = new Set(featured.map(f => f.provider_id))
       const rest = all
         .filter(p => !featuredIds.has(p.provider_id))

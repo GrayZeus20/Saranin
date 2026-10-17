@@ -232,11 +232,37 @@ function SearchPanel({
     )
   }
 
+  // A settled query with zero rows keeps the panel OPEN with a real message —
+  // closing it on an empty result read as the search "not responding".
+  if (showSearchResults && searchResults.length === 0 && searchInput.trim().length >= 2) {
+    return (
+      <div id={id} data-search-panel className="absolute top-full mt-2 w-full bg-surface-elevated border border-zinc-800 rounded-xl overflow-hidden shadow-2xl z-50">
+        <p className="text-text-muted text-xs text-center py-5 px-4">
+          No title matches "<span className="text-text-primary font-bold">{searchInput.trim()}</span>".
+          Press <span className="text-accent font-bold">Enter</span> to search the full catalogue.
+        </p>
+        <button
+          type="button"
+          onClick={onSeeAll}
+          className="w-full text-center text-xs font-bold text-accent hover:text-white py-2.5 border-t border-zinc-800 transition-colors"
+        >
+          See all results for "{searchInput}"
+        </button>
+      </div>
+    )
+  }
+
   return null
 }
 
 // Region selector — which country's streaming catalog the app shows. Sits in
 // the nav next to the search so it is reachable from every route.
+//
+// The flag emoji is intentionally NOT rendered next to the code: on Windows,
+// Chromium has no color flag font and paints the emoji as its two regional
+// indicator letters, so 🇮🇩 + "ID" read as "ID ID" — the doubled-region report.
+// The code alone is the label; the flag stays in the dropdown where the name
+// sits beside it (and there the name disambiguates).
 function RegionSelect({ compact = false }: { compact?: boolean }) {
   const { region, setRegion } = useRegion()
   const [open, setOpen] = useState(false)
@@ -262,7 +288,8 @@ function RegionSelect({ compact = false }: { compact?: boolean }) {
     }
   }, [open])
 
-  const current = REGION_MAP[region]
+  // (No `current` lookup — the flag glyph it fed is gone; see the component
+  // comment about Windows rendering flag emoji as letters.)
 
   return (
     <div ref={wrapRef} className="relative shrink-0">
@@ -276,7 +303,8 @@ function RegionSelect({ compact = false }: { compact?: boolean }) {
           compact ? 'px-2.5 py-2 text-xs' : 'px-3 py-2 text-xs'
         }`}
       >
-        <span aria-hidden="true">{current?.flag || '🌍'}</span>
+        {/* No flag glyph here — see the component comment: on Windows it
+            duplicates the code ("ID ID"). */}
         <span className="font-bold">{region}</span>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
           <polyline points="6 9 12 15 18 9" />
@@ -548,7 +576,10 @@ export default function Navbar() {
     setSearchInput(val)
     clearTimeout(searchTimerRef.current)
     if (!val) { handleSearch(''); return }
-    searchTimerRef.current = setTimeout(() => handleSearch(val), 400)
+    // 250ms: long enough to batch fast typing into one request, short enough
+    // that the dropdown feels live. The old 400ms read as "searchnya ketutup /
+    // ga responsif" — the panel sat empty for almost half a second per keystroke.
+    searchTimerRef.current = setTimeout(() => handleSearch(val), 250)
   }
 
   // Focus moving INTO the dropdown (trending chips, result rows, "see all")
@@ -608,11 +639,16 @@ export default function Navbar() {
 
   return (
     <>
-      <motion.nav
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="sticky top-0 z-40 bg-surface/80 backdrop-blur-md border-b border-zinc-800/50 safe-top"
+      {/* Full-bleed sticky header. Rendered as a PORTAL-free sibling of the
+          page container: it sits outside the `max-w-[1400px]` wrapper that
+          every page mounts it in, so the bar and its bottom border span the
+          whole body instead of stopping at the content's gutters (the
+          "navbar nempel di div" report). React portals are avoided by making
+          the bar position:fixed — the page then pads its own top by
+          NAV_HEIGHT so nothing hides underneath it. */}
+      <div aria-hidden="true" className="h-14 safe-top shrink-0" />
+      <nav
+        className="fixed top-0 left-0 right-0 z-40 bg-surface/80 backdrop-blur-md border-b border-zinc-800/50 safe-top"
       >
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 md:px-12 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-8">
@@ -804,7 +840,7 @@ export default function Navbar() {
             </motion.div>
           )}
         </AnimatePresence>
-      </motion.nav>
+      </nav>
     </>
   )
 }

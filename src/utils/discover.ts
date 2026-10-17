@@ -50,6 +50,16 @@ export function runtimeRange(band: RuntimeBand): { from: number | null; to: numb
   return { from: 120, to: null }
 }
 
+/**
+ * Age-rating band, server-side via US certifications (TMDB's `adult` flag is
+ * always false on discover results — verified against the live API — so the
+ * certification params are the only working constraint).
+ *   'all'   → G|PG|PG-13 (movie) / TV-G|TV-Y|TV-Y7|TV-PG (tv)
+ *   'adult' → R|NC-17 (movie) / TV-MA (tv)
+ * Unrated (NR) titles carry no certification and land in neither band.
+ */
+export type AgeBand = 'all' | 'adult'
+
 export interface DiscoverOptions {
   /** movie + tv sort fields */
   sort: DiscoverSort
@@ -78,6 +88,20 @@ export interface DiscoverOptions {
   genreIds?: number[]
   /** Japanese animation only — with_genres=16 + with_original_language=ja */
   animeOnly?: boolean
+  /**
+   * Age-rating band. TMDB's `adult` flag is useless as a filter (it is false on
+   * everything discover returns), so this uses US certifications server-side:
+   *   all   → certification.lte PG-13 / TV-PG (family-friendly only)
+   *   adult → certification.gte R / TV-MA
+   */
+  ageBand?: AgeBand | null
+  /**
+   * Restrict to titles ORIGINATING from these countries (ISO 3166-1, OR'd —
+   * TMDB reads `KR|CN` as either). This is what powers the drama presets:
+   * Sinetron (ID), Drakor (KR) and Dracin (CN) are defined by origin, not by
+   * genre alone.
+   */
+  originCountries?: string[]
   /**
    * True when this view also renders a hero from the first item (home page 1).
    * A merged request then targets GRID_PAGE_SIZE grid tiles PLUS the hero, so the
@@ -109,6 +133,13 @@ export function buildDiscoverParams(opts: DiscoverOptions): URLSearchParams {
   if (opts.ratingFloor) params.set('vote_average.gte', String(opts.ratingFloor))
   if (opts.runtimeFrom) params.set('with_runtime.gte', String(opts.runtimeFrom))
   if (opts.runtimeTo) params.set('with_runtime.lte', String(opts.runtimeTo))
+  // Origin countries — the drama presets. Pipe = OR, so `KR|CN` accepts either.
+  const countries = (opts.originCountries || []).filter(c => /^[A-Z]{2}$/.test(c))
+  if (countries.length > 0) params.set('with_origin_country', countries.join('|'))
+  // Age band → US certifications. The certification_* params are applied per
+  // kind below (movie and tv use different rating tokens), so only the band's
+  // direction is decided here.
+  if (opts.ageBand) params.set('certification_country', 'US')
 
   // Genres. A pipe (`a|b`) is OR, a comma (`a,b`) is AND — the two cannot be
   // mixed, so the anime case ANDs the animation genre onto the picked ones
@@ -143,6 +174,14 @@ export async function fetchDiscoverPage(opts: DiscoverOptions): Promise<Combined
     const dateLte = kind === 'movie' ? 'primary_release_date.lte' : 'first_air_date.lte'
     if (opts.yearFrom) params.set(dateGte, `${opts.yearFrom}-01-01`)
     if (opts.yearTo) params.set(dateLte, `${opts.yearTo}-12-31`)
+    // Age band → the kind's own rating tokens (movie: G/PG/PG-13/R/NC-17;
+    // tv: TV-Y…/TV-MA). `lte` keeps the family-friendly band inclusive of the
+    // everything-under-R set; `gte` on R/TV-MA isolates the adult half.
+    if (opts.ageBand === 'all') {
+      params.set('certification.lte', kind === 'movie' ? 'PG-13' : 'TV-PG')
+    } else if (opts.ageBand === 'adult') {
+      params.set('certification.gte', kind === 'movie' ? 'R' : 'TV-MA')
+    }
     return `/discover/${kind}?${params.toString()}`
   }
 

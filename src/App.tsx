@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { toast } from 'sonner'
 import { ImageWithFallback } from './components/ImageWithFallback'
 import { TrailerHover } from './components/TrailerHover'
+import { CardDetailPopup } from './components/CardDetailPopup'
 import Navbar from './components/Navbar'
 import ScrollRow from './components/ScrollRow'
 import { WatchButton } from './components/WatchButton'
@@ -21,7 +22,7 @@ import { useWatchlist } from './utils/watchlist'
 import { useDocumentTitle } from './utils/useDocumentTitle'
 import {
   fetchDiscoverPage, fetchCuratedPage, runtimeRange, GRID_PAGE_SIZE,
-  type TMDBListResponse, type DiscoverSort, type DiscoverMedia, type RuntimeBand,
+  type TMDBListResponse, type DiscoverSort, type DiscoverMedia, type RuntimeBand, type AgeBand,
 } from './utils/discover'
 
 // Environment validation
@@ -31,6 +32,20 @@ if (!TMDB_TOKEN) {
 
 type CategoryKey = 'now_playing' | 'trending' | 'popular' | 'top_rated'
 type ContentType = 'all' | 'movie' | 'tv' | 'anime'
+/**
+ * Drama presets. Each is a server-side /discover shape — origin country (+ the
+ * drama/soap genre, ANDed) defines the category, not a client-side filter:
+ *   sinetron → Indonesian drama/soap
+ *   drakor   → Korean drama
+ *   dracin   → Chinese drama
+ * `null` = the view is not a drama preset.
+ */
+type DramaKey = 'sinetron' | 'drakor' | 'dracin'
+const DRAMA_PRESETS: Record<DramaKey, { label: string; countries: string[] }> = {
+  sinetron: { label: 'Sinetron', countries: ['ID'] },
+  drakor: { label: 'Drakor', countries: ['KR'] },
+  dracin: { label: 'Dracin', countries: ['CN'] },
+}
 
 const CATEGORY_ENDPOINTS: Record<CategoryKey, { label: string; movie: string; tv: string }> = {
   now_playing: { label: 'Now Playing', movie: '/movie/now_playing', tv: '/tv/on_the_air' },
@@ -189,6 +204,10 @@ export default function App() {
   // page rendered as ~10 tiles, and in a genre/date-heavy week as none. 'all'
   // asks for both kinds server-side, so the page that arrives is the page shown.
   const contentType: ContentType = rawType === 'movie' || rawType === 'tv' || rawType === 'anime' || rawType === 'all' ? rawType : 'all'
+  // Drama presets are their own URL dimension: a preset forces TV + drama genre
+  // + origin country server-side, and it must survive alongside the Type pills.
+  const rawDrama = searchParams.get('drama')
+  const activeDrama: DramaKey | null = rawDrama && rawDrama in DRAMA_PRESETS ? (rawDrama as DramaKey) : null
 
   // --- Discover filters: year / rating floor / runtime ---
   // Validated like every other URL value — a hand-edited `year=abc` must not
@@ -207,8 +226,10 @@ export default function App() {
   }, [searchParams])
   const rawRuntime = searchParams.get('runtime')
   const runtimeBand: RuntimeBand | null = rawRuntime === 'short' || rawRuntime === 'medium' || rawRuntime === 'long' ? rawRuntime : null
-  const discoverFilterValue: DiscoverFilterValue = { yearFrom, yearTo, ratingFloor, runtimeBand }
-  const discoverFilterCount = (yearFrom !== null || yearTo !== null ? 1 : 0) + (ratingFloor !== null ? 1 : 0) + (runtimeBand !== null ? 1 : 0)
+  const rawAge = searchParams.get('age')
+  const ageBand: AgeBand | null = rawAge === 'all' || rawAge === 'adult' ? rawAge : null
+  const discoverFilterValue: DiscoverFilterValue = { yearFrom, yearTo, ratingFloor, runtimeBand, ageBand }
+  const discoverFilterCount = (yearFrom !== null || yearTo !== null ? 1 : 0) + (ratingFloor !== null ? 1 : 0) + (runtimeBand !== null ? 1 : 0) + (ageBand !== null ? 1 : 0)
   const hasDiscoverFilters = discoverFilterCount > 0
 
   const [showGenres, setShowGenres] = useState(() => searchParams.get('filters') === '1')
@@ -309,12 +330,15 @@ export default function App() {
   const endpoints = CATEGORY_ENDPOINTS[activeCategory] ?? CATEGORY_ENDPOINTS.now_playing
   const media = mediaOf(contentType)
   const animeOnly = contentType === 'anime'
-  const useDiscover = activePlatform !== null || hasDiscoverFilters || contentType !== 'all' || activeGenres.length > 0
+  // A drama preset forces TV + its origin country server-side; it is a view of
+  // its own, so it counts as "filtered" even with every other pill untouched.
+  const dramaCountries = activeDrama ? DRAMA_PRESETS[activeDrama].countries : []
+  const useDiscover = activePlatform !== null || hasDiscoverFilters || contentType !== 'all' || activeGenres.length > 0 || activeDrama !== null
   const runtime = runtimeBand ? runtimeRange(runtimeBand) : { from: null, to: null }
   const pageQuery = useQuery({
     // Every constraint is part of the key: changing one is a new fetch, never a
     // re-render of the previous filter's page.
-    queryKey: ['home', activeCategory, currentPage, activePlatform, region, locale, yearFrom, yearTo, ratingFloor, runtimeBand, media, animeOnly, activeGenres.join(',')],
+    queryKey: ['home', activeCategory, currentPage, activePlatform, region, locale, yearFrom, yearTo, ratingFloor, runtimeBand, ageBand, media, animeOnly, activeGenres.join(','), activeDrama],
     queryFn: () => useDiscover
       ? fetchDiscoverPage({
           sort: CATEGORY_SORT[activeCategory] ?? CATEGORY_SORT.now_playing,
@@ -334,6 +358,8 @@ export default function App() {
           media,
           genreIds: activeGenres,
           animeOnly,
+          ageBand,
+          originCountries: dramaCountries,
           // Page 1 spends one title on the hero — ask for a full grid underneath it.
           heroSlot: currentPage === 1,
         })
@@ -454,6 +480,7 @@ export default function App() {
       cat: key === 'now_playing' ? null : key,
       genres: null,
       type: null,
+      drama: null,
       page: null,
     })
   }, [updateParams])
@@ -472,6 +499,7 @@ export default function App() {
     updateParams({
       provider: id === null ? null : String(id),
       genres: null,
+      drama: null,
       page: null,
     })
   }, [updateParams])
@@ -479,6 +507,16 @@ export default function App() {
   const setContentTypeFilter = useCallback((type: ContentType) => {
     // 'all' is the default view, so it drops the param rather than writing it.
     updateParams({ type: type === 'all' ? null : type })
+  }, [updateParams])
+
+  // Drama presets are single-select — picking one drops the others. A preset
+  // implies TV, so the Type pill switches to 'tv' to stay truthful in the UI.
+  const selectDrama = useCallback((drama: DramaKey | null) => {
+    updateParams({
+      drama: drama,
+      type: drama ? 'tv' : null,
+      page: null,
+    })
   }, [updateParams])
 
   // Year / rating / runtime are server-side constraints, so any change starts a
@@ -489,6 +527,7 @@ export default function App() {
       year_to: next.yearTo === null ? null : String(next.yearTo),
       rating: next.ratingFloor === null ? null : String(next.ratingFloor),
       runtime: next.runtimeBand,
+      age: next.ageBand,
       page: null,
     })
   }, [updateParams])
@@ -498,14 +537,14 @@ export default function App() {
   // Filters route through this, so the two can never drift apart.
   const resetFilters = useCallback(() => {
     updateParams({
-      cat: null, genres: null, provider: null, type: null, page: null,
-      year_from: null, year_to: null, rating: null, runtime: null,
+      cat: null, genres: null, provider: null, type: null, page: null, drama: null,
+      year_from: null, year_to: null, rating: null, runtime: null, age: null,
     })
   }, [updateParams])
 
   // 'all' is the default view, not a filter — counting it showed a badge of 1 on
   // a pristine home. Deviation from the default is what counts.
-  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'all' ? 1 : 0) + discoverFilterCount
+  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'all' ? 1 : 0) + discoverFilterCount + (activeDrama !== null ? 1 : 0)
   // `activeFilterCount` drives the badge; the Reset control must also appear when
   // only the category moved, since resetFilters clears that too.
   const hasActiveFilters = activeFilterCount > 0 || activeCategory !== 'now_playing'
@@ -878,6 +917,27 @@ export default function App() {
                   )}
                 </div>
 
+                {/* Drama presets — server-side origin-country views, not client
+                    filters. Each pill is its own /discover query shape. */}
+                <div className="mt-4 pb-4 border-b border-zinc-800/50">
+                  <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Drama</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(Object.entries(DRAMA_PRESETS) as [DramaKey, { label: string }][]).map(([key, meta]) => (
+                      <button
+                        key={key}
+                        onClick={() => selectDrama(activeDrama === key ? null : key)}
+                        className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                          activeDrama === key
+                            ? 'bg-accent text-black'
+                            : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
+                        }`}
+                      >
+                        {meta.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Content Type Section */}
                 <div className="mt-4 pb-4 border-b border-zinc-800/50">
                   <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Type</p>
@@ -935,6 +995,7 @@ export default function App() {
                 onClick={() => openDetail(movie)}
                 className="cursor-pointer"
               >
+                <CardDetailPopup movie={movie} mediaType={movie.media_type === 'tv' ? 'tv' : 'movie'}>
                 <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
                   {movie.poster_path ? (
                     <>
@@ -976,18 +1037,25 @@ export default function App() {
                     compact
                     entry={{ id: movie.id, media_type: movie.media_type === 'tv' ? 'tv' : 'movie', title: movie.title, poster_path: movie.poster_path, vote_average: movie.vote_average, release_date: movie.release_date }}
                   />
-                  {/* Bottom info */}
-                  <div className="absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/90 to-transparent">
-                    <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5">{movie.title}</p>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-white/50 text-[9px] sm:text-[10px]">{formatDate(movie.release_date)}</span>
-                      {movie.genre_ids?.[0] && (
-                        <>
-                          <span className="text-white/30 text-[9px]">•</span>
-                          <span className="text-white/50 text-[9px] sm:text-[10px]">{GENRE_MAP[movie.genre_ids[0]]}</span>
-                        </>
-                      )}
-                    </div>
+                  {/* Bottom info — NOT clipped by the poster box: the caption
+                      lives outside the aspect box, so card zoom (scale on the
+                      article) can never crop it. This is the fix for the
+                      "judul tertutup saat di-zoom" report: the caption used to
+                      sit INSIDE the overflow-hidden poster box. */}
+                </div>
+                </CardDetailPopup>
+                {/* Caption outside the overflow-hidden box — visible at every
+                    zoom level, and it grows the card instead of being cropped. */}
+                <div className="px-0.5 pt-2">
+                  <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5">{movie.title}</p>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-text-muted text-[9px] sm:text-[10px]">{formatDate(movie.release_date)}</span>
+                    {movie.genre_ids?.[0] && GENRE_MAP[movie.genre_ids[0]] && (
+                      <>
+                        <span className="text-text-muted/40 text-[9px]">•</span>
+                        <span className="text-text-muted text-[9px] sm:text-[10px]">{GENRE_MAP[movie.genre_ids[0]]}</span>
+                      </>
+                    )}
                   </div>
                 </div>
               </motion.article>

@@ -37,6 +37,9 @@ interface Video {
   official: boolean
 }
 
+interface ReleaseDateEntry { certification: string; note?: string }
+interface ContentRatingEntry { iso_3166_1: string; rating: string }
+
 interface Movie {
   id: number
   title: string
@@ -56,6 +59,11 @@ interface MovieDetail extends Movie {
   revenue: number
   genres: { id: number; name: string }[]
   production_companies: { id: number; name: string; logo_path: string | null }[]
+  original_title?: string
+  original_language?: string
+  alternative_titles?: Array<{ iso_3166_1: string; title: string; type?: string }>
+  content_ratings?: { results: ContentRatingEntry[] }
+  release_dates?: { results: Array<{ iso_3166_1: string; release_dates: ReleaseDateEntry[] }> }
   credits: {
     cast: CastMember[]
     crew: { job: string; name: string }[]
@@ -90,6 +98,37 @@ function formatMoney(n: number): string {
   return `$${n.toLocaleString()}`
 }
 
+/** Titles/scripts that are not written in Latin characters — the ones the
+ *  "latin title" line exists for (Korean hangul, Chinese hanzi, Japanese…). */
+function isNonLatin(s: string): boolean {
+  return /[\uac00-\ud7af\u4e00-\u9fff\u3040-\u30ff\u3400-\u4dbf\uf900-\ufaff]/.test(s)
+}
+
+/** A romanized alternative title recorded by TMDB for the origin country. */
+function latinAltOf(alts: Array<{ iso_3166_1: string; title: string; type?: string }>, country?: string): string | null {
+  const origin = country || (alts.length > 0 ? alts[0].iso_3166_1 : '')
+  const fromOrigin = alts.filter(a => a.iso_3166_1 === origin)
+  return fromOrigin.find(a => /roman|latin|romaja/i.test(a.type || ''))?.title
+    || fromOrigin.find(a => isLatin(a.title))?.title
+    || null
+}
+
+function isLatin(s: string): boolean {
+  return !isNonLatin(s) && /[a-z]/i.test(s)
+}
+
+/**
+ * Best-guess ISO country of the title's origin, from the alternative-title
+ * entries (the origin country usually records its own-language title) —
+ * fall back to the original language's typical country.
+ */
+function originalCountryOf(detail: MovieDetail, alts: Array<{ iso_3166_1: string; title: string }>): string | undefined {
+  const lang = detail.original_language
+  const langCountry: Record<string, string> = { ko: 'KR', zh: 'CN', ja: 'JP', th: 'TH', id: 'ID' }
+  if (lang && alts.some(a => a.iso_3166_1 === langCountry[lang])) return langCountry[lang]
+  return lang && langCountry[lang] ? langCountry[lang] : alts[0]?.iso_3166_1
+}
+
 export default function MovieDetailPage() {
   const { id } = useParams<{ id: string }>()
   const location = useLocation()
@@ -121,10 +160,10 @@ export default function MovieDetailPage() {
     // this the key never existed, so both sections were dead on every title.
     // `recommendations` rides along for the "More Like This" rail.
     fetchWithRateLimit<any>(
-      `/${endpoint}/${id}?append_to_response=credits,videos,similar,recommendations,watch%2Fproviders&language=${locale}`,
+      `/${endpoint}/${id}?append_to_response=credits,videos,similar,recommendations,watch%2Fproviders,${isTv ? 'content_ratings' : 'release_dates'}&language=${locale}`,
       { signal: controller.signal }
     )
-      .then(data => {
+      .then(async data => {
         // TV payloads name their fields differently (`name`, `first_air_date`)
         // not just at the top level but inside every nested result list too.
         // Only the top-level object used to be normalized, so the rails built
@@ -145,6 +184,18 @@ export default function MovieDetailPage() {
             ? { ...data.recommendations, results: (data.recommendations.results || []).map(relabel) }
             : data.recommendations,
         } : data
+        // Alternative titles — the source of the romanized ("latin") title for
+        // Korean/Chinese/Japanese originals. A failure here must never take the
+        // page down; the line just does not render.
+        try {
+          const alt = await fetchWithRateLimit<any>(
+            `/${endpoint}/${id}/alternative_titles?language=${locale}`,
+            { signal: controller.signal }
+          )
+          normalized.alternative_titles = isTv ? (alt?.results || []) : (alt?.titles || [])
+        } catch {
+          normalized.alternative_titles = []
+        }
         setDetail(normalized)
         setLoading(false)
       })
@@ -261,6 +312,27 @@ export default function MovieDetailPage() {
 
   const cast = detail.credits?.cast?.slice(0, 10) || []
   const similar = detail.similar?.results?.slice(0, 20) || []
+
+  // --- Titles in other scripts ---------------------------------------------
+  // `original_title` (movie) / `original_name` (tv) arrives on the detail
+  // payload regardless of the display locale. When it is written in a non-
+  // Latin script, the alternative_titles list's romanized entry becomes the
+  // "latin" line; the original script itself becomes the "original" line.
+  const originalTitle = detail.original_title || (detail as any).original_name || ''
+  const alts = detail.alternative_titles || []
+  const originCountryCode = originalCountryOf(detail, alts)
+  const latinTitle = isNonLatin(originalTitle)
+    ? (latinAltOf(alts, originCountryCode) || (isNonLatin(movie.title) ? null : movie.title))
+    : (isNonLatin(movie.title) ? latinAltOf(alts, originCountryCode) : null)
+  const originalScriptTitle = isNonLatin(originalTitle) ? originalTitle : null
+
+  // --- Age rating ------------------------------------------------------------
+  // US certification when present (movie: release_dates; tv: content_ratings);
+  // anything R / NC-17 / TV-MA reads as "18+". Unrated titles show no badge.
+  const usCert = isTv
+    ? (detail.content_ratings?.results || []).find(r => r.iso_3166_1 === 'US')?.rating
+    : ((detail.release_dates?.results || []).find(r => r.iso_3166_1 === 'US')?.release_dates || []).find(d => d.certification)?.certification
+  const ageRating = usCert && ['R', 'NC-17', 'TV-MA'].includes(usCert) ? '18+' : usCert && usCert !== 'NR' ? usCert : null
   // Recommendations, minus anything already shown in the similar rail and minus
   // the title itself. TMDB's two rails overlap heavily; one screen, no repeats.
   const similarIds = new Set(similar.map(m => m.id))
@@ -331,8 +403,37 @@ export default function MovieDetailPage() {
             </div>
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-text-primary leading-tight mb-1">{movie.title}</h1>
+              {/* Romanized ("latin") title for non-Latin originals — Korean,
+                  Chinese and Japanese titles ship in their own script, and the
+                  alternative_titles list carries TMDB's romanization. Shown
+                  only when it actually differs from the heading. */}
+              {latinTitle && latinTitle !== movie.title && (
+                <p className="text-text-secondary text-sm font-medium mb-1">
+                  <span className="text-text-muted text-[10px] uppercase tracking-widest font-bold mr-2">Latin</span>
+                  {latinTitle}
+                </p>
+              )}
+              {/* The original-script title when the heading is a translation. */}
+              {originalScriptTitle && originalScriptTitle !== movie.title && originalScriptTitle !== latinTitle && (
+                <p className="text-text-muted text-sm mb-1">
+                  <span className="text-[10px] uppercase tracking-widest font-bold mr-2">Original</span>
+                  {originalScriptTitle}
+                </p>
+              )}
               {detail.tagline && <p className="text-accent text-sm italic mb-3">"{detail.tagline}"</p>}
               <div className="flex flex-wrap items-center gap-3 text-sm text-text-muted mb-4">
+                {ageRating && (
+                  <span
+                    title={`US rating: ${usCert}`}
+                    className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-md border ${
+                      ageRating === '18+'
+                        ? 'bg-red-500/15 text-red-400 border-red-500/40'
+                        : 'bg-zinc-800/60 text-text-muted border-zinc-700'
+                    }`}
+                  >
+                    {ageRating}
+                  </span>
+                )}
                 <span>{formatDate(movie.release_date)}</span>
                 {detail.runtime && <><span className="text-zinc-700">•</span><span>{formatRuntime(detail.runtime)}</span></>}
                 <span className="text-zinc-700">•</span>

@@ -16,11 +16,18 @@ import { useLocale } from '../utils/locale'
 import { useDocumentTitle } from '../utils/useDocumentTitle'
 import {
   fetchDiscoverPage, fetchCuratedPage, runtimeRange, GRID_PAGE_SIZE,
-  type CombinedPage, type DiscoverSort, type DiscoverMedia, type RuntimeBand,
+  type CombinedPage, type DiscoverSort, type DiscoverMedia, type RuntimeBand, type AgeBand,
 } from '../utils/discover'
 import { DiscoverFilterSections, type DiscoverFilterValue } from '../components/DiscoverFilterSections'
 
 type ContentType = 'all' | 'movie' | 'tv' | 'anime'
+// Drama presets — same server-side shapes as home (App.tsx documents the rule).
+type DramaKey = 'sinetron' | 'drakor' | 'dracin'
+const DRAMA_PRESETS: Record<DramaKey, { label: string; countries: string[] }> = {
+  sinetron: { label: 'Sinetron', countries: ['ID'] },
+  drakor: { label: 'Drakor', countries: ['KR'] },
+  dracin: { label: 'Dracin', countries: ['CN'] },
+}
 
 const TITLES: Record<string, string> = {
   trending: 'Trending',
@@ -98,8 +105,13 @@ export default function CategoryPage() {
   }, [searchParams])
   const rawRuntime = searchParams.get('runtime')
   const runtimeBand: RuntimeBand | null = rawRuntime === 'short' || rawRuntime === 'medium' || rawRuntime === 'long' ? rawRuntime : null
-  const discoverFilterValue: DiscoverFilterValue = { yearFrom, yearTo, ratingFloor, runtimeBand }
-  const discoverFilterCount = (yearFrom !== null || yearTo !== null ? 1 : 0) + (ratingFloor !== null ? 1 : 0) + (runtimeBand !== null ? 1 : 0)
+  const rawAge = searchParams.get('age')
+  const ageBand: AgeBand | null = rawAge === 'all' || rawAge === 'adult' ? rawAge : null
+  // Drama presets — same single-select shape as home (App.tsx documents them).
+  const rawDrama = searchParams.get('drama')
+  const activeDrama: DramaKey | null = rawDrama && rawDrama in DRAMA_PRESETS ? (rawDrama as DramaKey) : null
+  const discoverFilterValue: DiscoverFilterValue = { yearFrom, yearTo, ratingFloor, runtimeBand, ageBand }
+  const discoverFilterCount = (yearFrom !== null || yearTo !== null ? 1 : 0) + (ratingFloor !== null ? 1 : 0) + (runtimeBand !== null ? 1 : 0) + (ageBand !== null ? 1 : 0)
   const hasDiscoverFilters = discoverFilterCount > 0
 
   // Single writer for the URL. `replace` by default so filter toggling does not
@@ -122,6 +134,7 @@ export default function CategoryPage() {
   // after arrival.
   const media = mediaOf(contentType)
   const animeOnly = contentType === 'anime'
+  const dramaCountries = activeDrama ? DRAMA_PRESETS[activeDrama].countries : []
   const { region } = useRegion()
   const { locale } = useLocale()
 
@@ -134,11 +147,11 @@ export default function CategoryPage() {
   // /discover — the only surface that can express it server-side. A client pass
   // after arrival is what used to leave the grid short of its own label.
   const endpoints = ENDPOINT_MAP[categoryKey] ?? ENDPOINT_MAP.popular
-  const useDiscover = activePlatform !== null || hasDiscoverFilters || contentType !== 'all' || activeGenres.length > 0
+  const useDiscover = activePlatform !== null || hasDiscoverFilters || contentType !== 'all' || activeGenres.length > 0 || activeDrama !== null
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     // Every server-side constraint belongs in the key: a filter change must be a
     // new fetch, never a re-render of the old (wrong-filter) page.
-    queryKey: ['category', type, page, activePlatform, region, locale, yearFrom, yearTo, ratingFloor, runtimeBand, media, animeOnly, activeGenres.join(',')],
+    queryKey: ['category', type, page, activePlatform, region, locale, yearFrom, yearTo, ratingFloor, runtimeBand, ageBand, media, animeOnly, activeGenres.join(','), activeDrama],
     queryFn: async (): Promise<CombinedPage> => useDiscover
       ? fetchDiscoverPage({
           sort,
@@ -157,6 +170,8 @@ export default function CategoryPage() {
           media,
           genreIds: activeGenres,
           animeOnly,
+          ageBand,
+          originCountries: dramaCountries,
         })
       : fetchCuratedPage(endpoints.movie, endpoints.tv, page, locale),
     // No placeholderData: the previous page belongs to a different filter. Showing
@@ -218,11 +233,16 @@ export default function CategoryPage() {
 
   // 'all' is the default view here too, not a filter — counting it showed a badge
   // of "1" on a pristine category page and a Reset that reset nothing.
-  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'all' ? 1 : 0) + discoverFilterCount
+  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'all' ? 1 : 0) + discoverFilterCount + (activeDrama !== null ? 1 : 0)
 
   // Single-select platform — 'All' clears it and returns to the category feed.
   const selectPlatform = useCallback((id: number | null) => {
-    updateParams({ provider: id === null ? null : String(id), genres: null, page: null })
+    updateParams({ provider: id === null ? null : String(id), genres: null, drama: null, page: null })
+  }, [updateParams])
+
+  // Drama presets — same single-select + implied-TV rule as home.
+  const selectDrama = useCallback((drama: DramaKey | null) => {
+    updateParams({ drama, type: drama ? 'tv' : null, page: null })
   }, [updateParams])
 
   // Year / rating / runtime are server-side constraints — page resets with them.
@@ -232,6 +252,7 @@ export default function CategoryPage() {
       year_to: next.yearTo === null ? null : String(next.yearTo),
       rating: next.ratingFloor === null ? null : String(next.ratingFloor),
       runtime: next.runtimeBand,
+      age: next.ageBand,
       page: null,
     })
   }, [updateParams])
@@ -243,7 +264,7 @@ export default function CategoryPage() {
   useEffect(() => {
     if (prevCategoryRef.current === categoryKey) return
     prevCategoryRef.current = categoryKey
-    updateParams({ page: null, genres: null, provider: null, type: null })
+    updateParams({ page: null, genres: null, provider: null, type: null, drama: null })
   }, [categoryKey, updateParams])
 
   // Region changes invalidate the provider ids — a Netflix id is only Netflix
@@ -265,8 +286,8 @@ export default function CategoryPage() {
 
   const resetAllFilters = useCallback(() => {
     updateParams({
-      page: null, genres: null, provider: null, type: null,
-      year_from: null, year_to: null, rating: null, runtime: null,
+      page: null, genres: null, provider: null, type: null, drama: null,
+      year_from: null, year_to: null, rating: null, runtime: null, age: null,
     })
   }, [updateParams])
 
@@ -371,6 +392,26 @@ export default function CategoryPage() {
 
               {/* Year / Rating / Runtime — server-side discover constraints */}
               <DiscoverFilterSections value={discoverFilterValue} onChange={setDiscoverFilters} />
+
+              {/* Drama presets — same pills as home */}
+              <div className="pt-4 pb-4 border-b border-zinc-800/50">
+                <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Drama</p>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.entries(DRAMA_PRESETS) as [DramaKey, { label: string }][]).map(([key, meta]) => (
+                    <button
+                      key={key}
+                      onClick={() => selectDrama(activeDrama === key ? null : key)}
+                      className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                        activeDrama === key
+                          ? 'bg-accent text-black'
+                          : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
+                      }`}
+                    >
+                      {meta.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {/* Platform Section — server-side filter against the region catalog */}
               <div className="pt-4 pb-4 border-b border-zinc-800/50">

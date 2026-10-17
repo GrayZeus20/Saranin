@@ -96,7 +96,9 @@ export function ImageWithFallback({ src, alt, className, fallbackText, fallbackC
         onLoad={() => setLoaded(true)}
         onError={() => setError(true)}
         loading={priority ? 'eager' : 'lazy'}
-        fetchPriority={priority ? 'high' : undefined}
+        // React 18 does not know `fetchPriority` and warns on the camelCase
+        // prop; the DOM attribute itself is lowercase, so it is passed verbatim.
+        {...(priority ? { fetchpriority: 'high' } as Record<string, string> : {})}
         decoding="async"
       />
     </>
