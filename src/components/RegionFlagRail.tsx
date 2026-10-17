@@ -58,22 +58,22 @@ export function RegionFlagRail({ regions, activeCode, onPick }: {
                     active ? 'ring-accent' : 'ring-zinc-700 group-hover:ring-accent'
                   }`}
                 >
-                  <span className="text-xl leading-none" aria-hidden="true">{r.flag}</span>
+                  {/* The country code inside the badge — NOT the flag emoji.
+                      Windows Chromium has no color flag font, so 🇮🇩 paints as
+                      its two indicator letters; combined with the code label
+                      below, every chip read "ID / ID" (the doubled-region
+                      report). One identifier per chip; the full name rides in
+                      the tooltip and the aria-label. */}
+                  <span className={`text-[11px] font-black leading-none tracking-tight ${active ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`} aria-hidden="true">
+                    {r.code}
+                  </span>
                   {/* The half-moon: a crescent highlight carved out of the badge. */}
                   <span className="moon-crescent pointer-events-none absolute inset-0 rounded-full bg-white/15" aria-hidden="true" />
                   <span className="absolute -bottom-0.5 -right-0.5 grid h-4 min-w-[16px] place-items-center rounded-full bg-accent px-1 text-[9px] font-bold text-black">
                     {services}
                   </span>
                 </span>
-                <span className={`text-[10px] font-bold leading-none transition-colors ${active ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`}>
-                  {r.code}
-                </span>
-                {/* The country NAME is moved into the tooltip label: rendering
-                    the flag emoji beside the code doubled the code on Windows
-                    (no color flag font → the emoji paints as its two indicator
-                    letters, e.g. 🇮🇩 under "ID" reads "ID ID"). */}
               </button>
-              <span className="sr-only">{r.name}</span>
             </div>
           )
         })}

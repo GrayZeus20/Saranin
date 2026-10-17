@@ -331,7 +331,8 @@ function RegionSelect({ compact = false }: { compact?: boolean }) {
                     code === region ? 'text-accent font-bold bg-surface-card' : 'text-text-muted hover:bg-surface-card hover:text-text-primary'
                   }`}
                 >
-                  <span aria-hidden="true">{meta.flag}</span>
+                  {/* No flag emoji here either — Windows paints it as the two
+                      indicator letters, which triplicates with name + code. */}
                   <span className="flex-1 truncate">{meta.name}</span>
                   <span className="text-text-muted/60 font-mono text-[10px]">{code}</span>
                 </button>

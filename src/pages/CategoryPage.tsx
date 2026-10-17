@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { useParams, Link, useSearchParams, useNavigationType } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, useNavigationType } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import { ImageWithFallback } from '../components/ImageWithFallback'
 import { TrailerHover } from '../components/TrailerHover'
+import { CardDetailPopup } from '../components/CardDetailPopup'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import { WatchButton } from '../components/WatchButton'
@@ -71,6 +72,7 @@ export default function CategoryPage() {
   const { type } = useParams<{ type: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigationType = useNavigationType()
+  const navigate = useNavigate()
 
   // View state lives in the URL, same as home: opening a title unmounts this
   // page, so the old useState version dumped the user back on page 1 with every
@@ -527,28 +529,43 @@ export default function CategoryPage() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
               {filteredMovies.map((m) => (
-                <Link key={`${m.media_type}-${m.id}`} to={m.media_type === 'tv' ? `/tv/${m.id}` : `/movie/${m.id}`} className="block group">
-                  <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
-                    <ImageWithFallback src={tmdbImage(m.poster_path, 'poster', 'w342')} alt={m.title} kind="poster" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" sizes="(min-width: 1280px) 20vw, (min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw" />
-                    <TrailerHover mediaType={m.media_type === 'tv' ? 'tv' : 'movie'} id={m.id} title={m.title} />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                    <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
-                      &#9733; {m.vote_average?.toFixed(1)}
+                <div
+                  key={`${m.media_type}-${m.id}`}
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`${m.title}${m.release_date ? ` (${m.release_date.slice(0, 4)})` : ''}`}
+                  onClick={() => navigate(m.media_type === 'tv' ? `/tv/${m.id}` : `/movie/${m.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      navigate(m.media_type === 'tv' ? `/tv/${m.id}` : `/movie/${m.id}`)
+                    }
+                  }}
+                  className="relative block group cursor-pointer hover:z-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
+                >
+                  <CardDetailPopup movie={m} mediaType={m.media_type === 'tv' ? 'tv' : 'movie'}>
+                    <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
+                      <ImageWithFallback src={tmdbImage(m.poster_path, 'poster', 'w342')} alt={m.title} kind="poster" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" sizes="(min-width: 1280px) 20vw, (min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                      <TrailerHover mediaType={m.media_type === 'tv' ? 'tv' : 'movie'} id={m.id} title={m.title} />
+                      <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
+                        &#9733; {m.vote_average?.toFixed(1)}
+                      </div>
+                      {m.media_type === 'tv' && (
+                        <div className="absolute top-2 left-2 bg-accent text-black text-[9px] font-bold px-1.5 py-0.5 rounded-md">TV</div>
+                      )}
+                      {isAnime(m) && (
+                        <div className={`${m.media_type === 'tv' ? 'top-[26px]' : 'top-2'} absolute left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md`}>Anime</div>
+                      )}
+                      <WatchButton
+                        compact
+                        entry={{ id: m.id, media_type: m.media_type === 'tv' ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
+                      />
                     </div>
-                    {m.media_type === 'tv' && (
-                      <div className="absolute top-2 left-2 bg-accent text-black text-[9px] font-bold px-1.5 py-0.5 rounded-md">TV</div>
-                    )}
-                    {isAnime(m) && (
-                      <div className={`${m.media_type === 'tv' ? 'top-[26px]' : 'top-2'} absolute left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md`}>Anime</div>
-                    )}
-                    <WatchButton
-                      compact
-                      entry={{ id: m.id, media_type: m.media_type === 'tv' ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
-                    />
-                  </div>
+                  </CardDetailPopup>
                   <p className="mt-2 text-xs sm:text-sm font-bold text-text-primary line-clamp-1 group-hover:text-accent transition-colors">{m.title}</p>
                   <p className="text-text-muted text-[10px]">{formatDate(m.release_date)}</p>
-                </Link>
+                </div>
               ))}
             </div>
           )}
