@@ -1,5 +1,45 @@
 # Tasks
 
+## Deepscan pass — error hunt (2026-10-17)
+
+Request: "deepscan cari error". Method: strict tsc (`--noUnusedLocals
+--noUnusedParameters`), grep lensa (debug leftovers, flag-emoji doubling, DOM
+nesting), plus a headless-Chromium sweep (7 routes, popup edge probes, region
+rail probe, SPA navigation, 0-console-error gate).
+
+Found and fixed (all real, verified in the sweep):
+- [x] **Popup clipped on grid edge columns & slid under the navbar on the top
+      row** — placement is now measured at open time: centered on the card,
+      clamped into the viewport horizontally, flipping below the card when
+      above has no room. Probe results: first col left=59, last col
+      right=1382 (both inside a 1440 viewport; the old CSS put the right
+      column's panel at ~68px off-screen on mobile widths).
+- [x] **Popup painted UNDER the next tile row** — each transformed
+      `motion.article` is its own stacking context, so the panel's z-30 was
+      local to the card; hovered cards now lift (`hover:z-40`).
+- [x] **"Open details" double-pushed history** — the card's onClick fired
+      after the link's navigation; stopPropagation on the link.
+- [x] **Region still doubled in three places** — the rail chips (flag emoji
+      inside the badge + code beneath it read "ID / ID" on Windows), the
+      region dropdown rows, and the detail "Available in" heading. One
+      identifier per surface now; names live in tooltips/aria-labels.
+- [x] **Preview pause/title chrome dimmed by hover gradients** — DOM order
+      painted TrailerHover beneath the gradient at every call site; gradient
+      renders first now (home rails + grid, category, search, detail rails).
+- [x] **Category grid had no detail popup** (parity gap) and its old
+      Link-wrapping would have nested anchors once the popup was added —
+      converted to a `role=link` tile with SPA navigate + keyboard handler.
+- [x] **latinAltOf missed third-country romanizations** — some TMDB titles
+      only carry a Latin alt title from another country; falls back now.
+- [x] **strict tsc failures** — dead `React` import (main.tsx), dead
+      `WatchButton` import (WatchlistPage).
+- [x] **Stale doc comments** — drama presets described a genre-AND that the
+      code does not send; TrailerHover said "top-left" where the glyph sits
+      bottom-left. Comments now match behavior.
+
+Gate: strict tsc clean · build green · dragtest 9/9 · sweep 0 console errors.
+Commit: c7b3fcf1.
+
 ## Feature pass 5 — drama presets, age filter, latin titles, navbar/chrome fixes (2026-10-17)
 
 Request: "filter platform netflix/prime/viu/wetv/bstation · Sinetron drakor dracin · fitur search
