@@ -321,13 +321,13 @@ export default function SearchPage() {
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => openDetail(m)}
-                    className="cursor-pointer"
+                    className="cursor-pointer relative hover:z-40"
                   >
                     <CardDetailPopup movie={m} mediaType={m.media_type === 'tv' ? 'tv' : 'movie'}>
                       <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
                         <ImageWithFallback src={tmdbImage(m.poster_path, 'poster', 'w342')} alt={m.title} kind="poster" className="w-full h-full object-cover" sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw" />
-                        <TrailerHover mediaType={m.media_type === 'tv' ? 'tv' : 'movie'} id={m.id} title={m.title} />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                        <TrailerHover mediaType={m.media_type === 'tv' ? 'tv' : 'movie'} id={m.id} title={m.title} />
                         <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
                           &#9733; {m.vote_average?.toFixed(1)}
                         </div>

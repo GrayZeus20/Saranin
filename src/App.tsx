@@ -33,12 +33,15 @@ if (!TMDB_TOKEN) {
 type CategoryKey = 'now_playing' | 'trending' | 'popular' | 'top_rated'
 type ContentType = 'all' | 'movie' | 'tv' | 'anime'
 /**
- * Drama presets. Each is a server-side /discover shape — origin country (+ the
- * drama/soap genre, ANDed) defines the category, not a client-side filter:
- *   sinetron → Indonesian drama/soap
- *   drakor   → Korean drama
- *   dracin   → Chinese drama
- * `null` = the view is not a drama preset.
+ * Drama presets. Each is a server-side /discover shape — the ORIGIN COUNTRY
+ * defines the view (`with_origin_country`); it is not a client-side filter.
+ * The user's genre pills still combine on top (with_genres), so "Drakor" +
+ * Romance narrows the same query rather than starting a second one:
+ *   sinetron → Indonesian series
+ *   drakor   → Korean series
+ *   dracin   → Chinese series
+ * A preset implies TV (`selectDrama` writes type=tv), and the anime strip
+ * still applies (`excludeAnime`), so donghua does not leak into Dracin.
  */
 type DramaKey = 'sinetron' | 'drakor' | 'dracin'
 const DRAMA_PRESETS: Record<DramaKey, { label: string; countries: string[] }> = {
@@ -157,10 +160,11 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink,
                   className="w-full h-full object-cover"
                   sizes="(min-width: 768px) 144px, (min-width: 640px) 128px, 112px"
                 />
-                {/* Hover preview sits right after the image; card chrome
-                    (gradient, badges, save button) paints over it. */}
-                <TrailerHover mediaType={m.media_type === 'tv' ? 'tv' : 'movie'} id={m.id} title={m.title} />
+                {/* Card chrome (gradient) first, then the preview — the
+                    preview layer carries its own pause + title chrome, which
+                    must paint ABOVE the gradient, not under it. */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                <TrailerHover mediaType={m.media_type === 'tv' ? 'tv' : 'movie'} id={m.id} title={m.title} />
                 <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1.5 py-0.5 rounded">
                   &#9733; {m.vote_average?.toFixed(1)}
                 </div>
@@ -993,7 +997,7 @@ export default function App() {
                   ease: [0.16, 1, 0.3, 1],
                 }}
                 onClick={() => openDetail(movie)}
-                className="cursor-pointer"
+                className="cursor-pointer relative hover:z-40"
               >
                 <CardDetailPopup movie={movie} mediaType={movie.media_type === 'tv' ? 'tv' : 'movie'}>
                 <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
@@ -1006,13 +1010,14 @@ export default function App() {
                         className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
                         sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw"
                       />
+                      {/* Gradient first, preview above it — the preview's pause
+                          + title chrome must not be dimmed by this overlay. */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
                       <TrailerHover mediaType={movie.media_type === 'tv' ? 'tv' : 'movie'} id={movie.id} title={movie.title} />
                     </>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-zinc-700 text-sm font-bold">{movie.title?.charAt(0)}</div>
                   )}
-                  {/* Gradient overlay always visible */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
                   {/* Details indicator on hover */}
                   <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300">
                     <span className="bg-white text-black text-[10px] font-bold px-4 py-1.5 rounded-full shadow-lg">

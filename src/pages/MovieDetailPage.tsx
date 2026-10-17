@@ -104,12 +104,16 @@ function isNonLatin(s: string): boolean {
   return /[\uac00-\ud7af\u4e00-\u9fff\u3040-\u30ff\u3400-\u4dbf\uf900-\ufaff]/.test(s)
 }
 
-/** A romanized alternative title recorded by TMDB for the origin country. */
+/** A romanized alternative title recorded by TMDB — the origin country's entry
+ *  first (its "Revised romanization" type wins), then any Latin-script entry,
+ *  since some titles only carry romanization from a third country. */
 function latinAltOf(alts: Array<{ iso_3166_1: string; title: string; type?: string }>, country?: string): string | null {
   const origin = country || (alts.length > 0 ? alts[0].iso_3166_1 : '')
   const fromOrigin = alts.filter(a => a.iso_3166_1 === origin)
   return fromOrigin.find(a => /roman|latin|romaja/i.test(a.type || ''))?.title
     || fromOrigin.find(a => isLatin(a.title))?.title
+    || alts.find(a => /roman|latin|romaja/i.test(a.type || ''))?.title
+    || alts.find(a => isLatin(a.title))?.title
     || null
 }
 
@@ -452,7 +456,9 @@ export default function MovieDetailPage() {
               {uniqueProviders.length > 0 && (
                 <div className="mb-5">
                   <h3 className="text-[10px] uppercase tracking-widest font-bold text-text-muted mb-2">
-                    Available in {REGION_MAP[providerRegionCode]?.flag || '🌍'} {REGION_MAP[providerRegionCode]?.name || providerRegionCode}
+                    {/* Name only — the flag emoji paints as its two indicator
+                        letters on Windows, doubling "ID" beside "Indonesia". */}
+                    Available in {REGION_MAP[providerRegionCode]?.name || providerRegionCode}
                     {providerRegionCode !== region && (
                       <span className="normal-case tracking-normal font-medium text-text-muted/80"> — no {region} data for this title</span>
                     )}
@@ -685,9 +691,10 @@ export default function MovieDetailPage() {
                           className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
                           sizes="(min-width: 640px) 128px, 112px"
                         />
-                        {/* Hover preview on similar/recommendation cards too. */}
-                        <TrailerHover mediaType={isTv ? 'tv' : 'movie'} id={m.id} title={m.title} />
+                        {/* Gradient first, preview above it — keeps the pause +
+                            title chrome undimmed. */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+                        <TrailerHover mediaType={isTv ? 'tv' : 'movie'} id={m.id} title={m.title} />
                         <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1 py-0.5 rounded">
                           ★ {m.vote_average?.toFixed(1)}
                         </div>
@@ -737,8 +744,10 @@ export default function MovieDetailPage() {
                           className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
                           sizes="(min-width: 640px) 128px, 112px"
                         />
-                        <TrailerHover mediaType={isTv ? 'tv' : 'movie'} id={m.id} title={m.title} />
+                        {/* Gradient first, preview above it — keeps the pause +
+                            title chrome undimmed (same rule as the rails). */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+                        <TrailerHover mediaType={isTv ? 'tv' : 'movie'} id={m.id} title={m.title} />
                         <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1 py-0.5 rounded">
                           ★ {m.vote_average?.toFixed(1)}
                         </div>
