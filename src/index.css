@@ -252,6 +252,14 @@ body {
   transform: translateZ(0);
 }
 
+/* Card detail popup — the hover panel on grid cards. It opens ABOVE the card
+   (bottom-full) and must survive the card's own transform-zoom: the panel is a
+   sibling of the poster box (not inside its overflow-hidden), so nothing
+   clips it. The delay makes it intentional (rest, not pass-through). */
+.card-popup > div[role='presentation'] {
+  will-change: opacity, transform;
+}
+
 /* Honour the OS "reduce motion" setting — shimmer, parallax and the whole
    motion/react layer collapse to instant state changes. */
 @media (prefers-reduced-motion: reduce) {

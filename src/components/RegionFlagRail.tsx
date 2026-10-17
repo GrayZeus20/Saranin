@@ -68,7 +68,12 @@ export function RegionFlagRail({ regions, activeCode, onPick }: {
                 <span className={`text-[10px] font-bold leading-none transition-colors ${active ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`}>
                   {r.code}
                 </span>
+                {/* The country NAME is moved into the tooltip label: rendering
+                    the flag emoji beside the code doubled the code on Windows
+                    (no color flag font → the emoji paints as its two indicator
+                    letters, e.g. 🇮🇩 under "ID" reads "ID ID"). */}
               </button>
+              <span className="sr-only">{r.name}</span>
             </div>
           )
         })}

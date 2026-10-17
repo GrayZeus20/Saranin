@@ -3,6 +3,8 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import { ImageWithFallback } from '../components/ImageWithFallback'
+import { TrailerHover } from '../components/TrailerHover'
+import { CardDetailPopup } from '../components/CardDetailPopup'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import { WatchButton } from '../components/WatchButton'
@@ -321,33 +323,37 @@ export default function SearchPage() {
                     onClick={() => openDetail(m)}
                     className="cursor-pointer"
                   >
-                    <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
-                      <ImageWithFallback src={tmdbImage(m.poster_path, 'poster', 'w342')} alt={m.title} kind="poster" className="w-full h-full object-cover" sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
-                      <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
-                        &#9733; {m.vote_average?.toFixed(1)}
-                      </div>
-                      {m.media_type === 'tv' && (
-                        <div className="absolute top-2 left-2 bg-accent text-black text-[9px] font-bold px-1.5 py-0.5 rounded-md">TV</div>
-                      )}
-                      {isAnime(m) && (
-                        <div className={`${m.media_type === 'tv' ? 'top-[26px]' : 'top-2'} absolute left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md`}>Anime</div>
-                      )}
-                      <WatchButton
-                        compact
-                        entry={{ id: m.id, media_type: m.media_type === 'tv' ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
-                      />
-                      <div className="absolute bottom-0 left-0 right-0 p-2.5 bg-gradient-to-t from-black/90 to-transparent">
-                        <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5">{m.title}</p>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-white/50 text-[9px] sm:text-[10px]">{formatDate(m.release_date)}</span>
-                          {m.genre_ids?.[0] && GENRE_MAP[m.genre_ids[0]] && (
-                            <>
-                              <span className="text-white/30 text-[9px]">•</span>
-                              <span className="text-white/50 text-[9px] sm:text-[10px]">{GENRE_MAP[m.genre_ids[0]]}</span>
-                            </>
-                          )}
+                    <CardDetailPopup movie={m} mediaType={m.media_type === 'tv' ? 'tv' : 'movie'}>
+                      <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
+                        <ImageWithFallback src={tmdbImage(m.poster_path, 'poster', 'w342')} alt={m.title} kind="poster" className="w-full h-full object-cover" sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw" />
+                        <TrailerHover mediaType={m.media_type === 'tv' ? 'tv' : 'movie'} id={m.id} title={m.title} />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                        <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
+                          &#9733; {m.vote_average?.toFixed(1)}
                         </div>
+                        {m.media_type === 'tv' && (
+                          <div className="absolute top-2 left-2 bg-accent text-black text-[9px] font-bold px-1.5 py-0.5 rounded-md">TV</div>
+                        )}
+                        {isAnime(m) && (
+                          <div className={`${m.media_type === 'tv' ? 'top-[26px]' : 'top-2'} absolute left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md`}>Anime</div>
+                        )}
+                        <WatchButton
+                          compact
+                          entry={{ id: m.id, media_type: m.media_type === 'tv' ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
+                        />
+                      </div>
+                    </CardDetailPopup>
+                    {/* Caption outside the clipped poster box — survives zoom. */}
+                    <div className="px-0.5 pt-2">
+                      <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5">{m.title}</p>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-text-muted text-[9px] sm:text-[10px]">{formatDate(m.release_date)}</span>
+                        {m.genre_ids?.[0] && GENRE_MAP[m.genre_ids[0]] && (
+                          <>
+                            <span className="text-text-muted/40 text-[9px]">•</span>
+                            <span className="text-text-muted text-[9px] sm:text-[10px]">{GENRE_MAP[m.genre_ids[0]]}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </motion.article>
