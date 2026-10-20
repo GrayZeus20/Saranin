@@ -13,36 +13,25 @@ interface ProviderCatalogResponse {
   results?: WatchProvider[]
 }
 
-// Priority order for the filter bar. Only providers actually available in the
-// region are shown; the rest are ignored. Netflix / Prime / Disney+ come first,
-// then the Asian streamers the catalogue is browsed for (Viu, WeTV, iQIYI,
-// Bstation…) — a name only appears when TMDB lists it for the region, so
-// Bstation is absent from e.g. the ID catalog by TMDB's own data.
+// Priority order for the filter bar — the services the catalogue is browsed for,
+// and nothing else. Names are matched case-insensitively and per region, so a
+// service TMDB does not list for the current region simply has no pill (Bstation
+// is absent from the ID catalog by TMDB's own data). HBO ships under three names
+// (Max / HBO Max / HBO Go) depending on region, Disney under three, so each
+// alias is listed and the first match wins.
 const FEATURED_ORDER = [
   'Netflix',
-  'Amazon Prime Video',
+  'Max',
+  'HBO Max',
+  'HBO Go',
   'Disney Plus',
   'Disney+',
   'Disney+ Hotstar',
-  'Apple TV Plus',
-  'Max',
-  'HBO Max',
-  'Hulu',
-  'Vidio',
+  'Amazon Prime Video',
+  'Prime Video',
   'Viu',
   'WeTV',
   'Bstation',
-  'Bilibili',
-  'iQIYI',
-  'Rakuten Viki',
-  'Viki',
-  'Catchplay',
-  'Crunchyroll',
-  'iflix',
-  'beIN Sports',
-  'Paramount Plus',
-  'Apple TV',
-  'Google Play Movies',
 ]
 
 export interface CatalogEntry {
@@ -83,11 +72,10 @@ export function getRegionProviders(region: string = DEFAULT_REGION, language: st
         if (match && !featured.some(f => f.provider_id === match.provider_id)) featured.push(match)
       }
       for (const name of FEATURED_ORDER) push(name)
-      const featuredIds = new Set(featured.map(f => f.provider_id))
-      const rest = all
-        .filter(p => !featuredIds.has(p.provider_id))
-        .sort((a, b) => a.provider_name.localeCompare(b.provider_name))
-      return [...featured, ...rest]
+      // Only the curated seven are offered. The long tail (Apple TV, iQIYI,
+      // Crunchyroll, …) made the pill rail unscannable and diluted the filter;
+      // the list is now exactly the services the catalogue is browsed for.
+      return featured
     } catch (err) {
       // Do NOT remember failures. The old code cached the resolved [] forever,
       // so one network blip left both filter bars stuck on "Loading platforms…"

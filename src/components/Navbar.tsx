@@ -68,7 +68,7 @@ function SearchField({
   return (
     <>
       <svg
-        className={`absolute ${isDesktop ? 'left-3' : 'left-7'} top-1/2 -translate-y-1/2 text-text-muted`}
+        className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
         width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
       >
         <circle cx="11" cy="11" r="8"></circle>
@@ -256,14 +256,16 @@ function SearchPanel({
 }
 
 // Region selector — which country's streaming catalog the app shows. Sits in
-// the nav next to the search so it is reachable from every route.
+// the nav next to the search so it is reachable from every route, and it is
+// exported because the Platform filter header mounts the same control: the
+// provider catalog is region-scoped, so the region belongs beside it.
 //
 // The flag emoji is intentionally NOT rendered next to the code: on Windows,
 // Chromium has no color flag font and paints the emoji as its two regional
 // indicator letters, so 🇮🇩 + "ID" read as "ID ID" — the doubled-region report.
 // The code alone is the label; the flag stays in the dropdown where the name
 // sits beside it (and there the name disambiguates).
-function RegionSelect({ compact = false }: { compact?: boolean }) {
+export function RegionSelect({ compact = false }: { compact?: boolean }) {
   const { region, setRegion } = useRegion()
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -776,37 +778,39 @@ export default function Navbar() {
         {/* Mobile search — mounts only after the icon is pressed, inside the
             sticky nav so it never scrolls away with the page. */}
         {mobileSearchOpen && (
-          <div ref={mobileSearchRef} className="md:hidden relative max-w-[1400px] mx-auto px-4 sm:px-6 pb-3">
-            <SearchField
-              variant="mobile"
-              searchInput={searchInput}
-              onSearchInput={onSearchInput}
-              onEnter={onSearchEnter}
-              onKeyNav={(key) => handleResultKeyNav(key)}
-              onEscape={closeSearchField}
-              onFocus={() => {
-                if (!searchInput) openPanel('trending')
-                else if (searchResults.length > 0) openPanel('results')
-              }}
-              onBlur={closeSearchPanels}
-              expanded={showTrending || showSearchResults}
-              listboxId="search-panel-mobile"
-              autoFocus
-            />
-            <SearchPanel
-              id="search-panel-mobile"
-              showTrending={showTrending}
-              showSearchResults={showSearchResults}
-              searchResults={searchResults}
-              activeIndex={activeIndex}
-              searchInput={searchInput}
-              recentSearches={recentSearches}
-              onPickTerm={(term) => { setSearchInput(term); handleSearch(term); setShowTrending(false) }}
-              onPickResult={goToDetail}
-              onSeeAll={() => goToSearchPage()}
-              onRemoveRecent={removeRecentSearch}
-              onClearRecent={clearRecentSearches}
-            />
+          <div ref={mobileSearchRef} className="md:hidden max-w-[1400px] mx-auto px-4 sm:px-6 pb-3">
+            <div className="relative w-full">
+              <SearchField
+                variant="mobile"
+                searchInput={searchInput}
+                onSearchInput={onSearchInput}
+                onEnter={onSearchEnter}
+                onKeyNav={(key) => handleResultKeyNav(key)}
+                onEscape={closeSearchField}
+                onFocus={() => {
+                  if (!searchInput) openPanel('trending')
+                  else if (searchResults.length > 0) openPanel('results')
+                }}
+                onBlur={closeSearchPanels}
+                expanded={showTrending || showSearchResults}
+                listboxId="search-panel-mobile"
+                autoFocus
+              />
+              <SearchPanel
+                id="search-panel-mobile"
+                showTrending={showTrending}
+                showSearchResults={showSearchResults}
+                searchResults={searchResults}
+                activeIndex={activeIndex}
+                searchInput={searchInput}
+                recentSearches={recentSearches}
+                onPickTerm={(term) => { setSearchInput(term); handleSearch(term); setShowTrending(false) }}
+                onPickResult={goToDetail}
+                onSeeAll={() => goToSearchPage()}
+                onRemoveRecent={removeRecentSearch}
+                onClearRecent={clearRecentSearches}
+              />
+            </div>
           </div>
         )}
 

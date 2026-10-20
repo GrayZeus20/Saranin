@@ -60,12 +60,9 @@ export default function WatchlistPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-12">
-            {items.map((entry, i) => (
-              <motion.article
+            {items.map((entry) => (
+              <article
                 key={`${entry.media_type}-${entry.id}`}
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: Math.min(0.04 + i * 0.02, 0.35), ease: [0.16, 1, 0.3, 1] }}
                 className="group"
               >
                 <Link to={`/${entry.media_type}/${entry.id}`} className="block">
@@ -95,7 +92,7 @@ export default function WatchlistPage() {
                 >
                   Remove
                 </button>
-              </motion.article>
+              </article>
             ))}
           </div>
         )}

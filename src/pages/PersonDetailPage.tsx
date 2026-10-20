@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { motion } from 'motion/react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import { ImageWithFallback } from '../components/ImageWithFallback'
@@ -204,12 +203,7 @@ export default function PersonDetailPage() {
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 py-12">
           {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="flex flex-col sm:flex-row gap-6 sm:gap-8 mb-10"
-          >
+          <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 mb-10">
             {/* Photo */}
             <div className="shrink-0 w-40 sm:w-48 mx-auto sm:mx-0">
               <div className="relative overflow-hidden rounded-xl shadow-2xl border border-zinc-800">
@@ -266,14 +260,10 @@ export default function PersonDetailPage() {
                 </div>
               )}
             </div>
-          </motion.div>
+          </div>
 
           {/* Filmography */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-          >
+          <div>
             <div className="flex items-center gap-4 mb-6">
               <h2 className="text-lg font-bold text-text-primary">Filmography</h2>
               <div className="flex gap-2">
@@ -301,14 +291,11 @@ export default function PersonDetailPage() {
             {/* Cast and crew credits render through one card — the two lists
                 only differ in their subtitle line. */}
             <div className="space-y-3">
-              {visibleCredits.map((credit, i) => (
-                <motion.div
+              {visibleCredits.map(credit => (
+                <div
                   // movie and tv ids are separate TMDB namespaces, so the bare
                   // id is not unique across a combined-credits list.
                   key={`${credit.media_type}-${credit.id}-${activeTab === 'cast' ? (credit as CastCredit).character : (credit as CrewCredit).job}`}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, delay: Math.min(i * 0.03, 0.5) }}
                 >
                   <Link
                     to={`/${credit.media_type || 'movie'}/${credit.id}`}
@@ -339,7 +326,7 @@ export default function PersonDetailPage() {
                       )}
                     </div>
                   </Link>
-                </motion.div>
+                </div>
               ))}
               {activeCredits.length === 0 && (
                 <p className="text-text-muted text-sm text-center py-8">
@@ -357,7 +344,7 @@ export default function PersonDetailPage() {
                 <span className="text-text-muted/60"> ({activeCredits.length - visibleCredits.length} remaining)</span>
               </button>
             )}
-          </motion.div>
+          </div>
         </div>
         <Footer />
       </div>

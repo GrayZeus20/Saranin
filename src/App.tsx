@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, Link, useSearchParams, useNavigationType } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import { toast } from 'sonner'
 import { ImageWithFallback } from './components/ImageWithFallback'
 import { TrailerHover } from './components/TrailerHover'
 import { CardDetailPopup } from './components/CardDetailPopup'
-import Navbar from './components/Navbar'
+import Navbar, { RegionSelect } from './components/Navbar'
 import ScrollRow from './components/ScrollRow'
 import { WatchButton } from './components/WatchButton'
 import Footer from './components/Footer'
@@ -21,8 +21,8 @@ import { useLocale } from './utils/locale'
 import { useWatchlist } from './utils/watchlist'
 import { useDocumentTitle } from './utils/useDocumentTitle'
 import {
-  fetchDiscoverPage, fetchCuratedPage, runtimeRange, GRID_PAGE_SIZE,
-  type TMDBListResponse, type DiscoverSort, type DiscoverMedia, type RuntimeBand, type AgeBand,
+  fetchDiscoverPage, fetchCuratedPage, GRID_PAGE_SIZE,
+  type TMDBListResponse, type DiscoverSort, type DiscoverMedia, type AgeBand,
 } from './utils/discover'
 
 // Environment validation
@@ -151,13 +151,13 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink,
           {movies.map(m => (
             // movie and tv ids are separate TMDB namespaces and coexist in one
             // rail, so the bare id is not a unique key here.
-            <div key={`${title}-${m.media_type ?? 'movie'}-${m.id}`} onClick={() => onMovieClick(m)} className="shrink-0 w-28 sm:w-32 md:w-36 cursor-pointer transition-transform duration-200 hover:scale-105 active:scale-95">
+            <div key={`${title}-${m.media_type ?? 'movie'}-${m.id}`} onClick={() => onMovieClick(m)} className="shrink-0 w-28 sm:w-32 md:w-36 cursor-pointer group">
               <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
                 <ImageWithFallback
                   src={tmdbImage(m.poster_path, 'poster', 'w342')}
                   alt={m.title}
                   kind="poster"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                   sizes="(min-width: 768px) 144px, (min-width: 640px) 128px, 112px"
                 />
                 {/* Card chrome (gradient) first, then the preview — the
@@ -173,7 +173,7 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink,
                   entry={{ id: m.id, media_type: m.media_type === 'tv' ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
                 />
               </div>
-              <p className="text-text-primary text-[11px] font-bold line-clamp-1 mt-1.5">{m.title}</p>
+              <p className="text-text-primary text-[11px] font-bold line-clamp-1 mt-1.5 group-hover:text-accent transition-colors">{m.title}</p>
             </div>
           ))}
         </ScrollRow>
@@ -213,7 +213,7 @@ export default function App() {
   const rawDrama = searchParams.get('drama')
   const activeDrama: DramaKey | null = rawDrama && rawDrama in DRAMA_PRESETS ? (rawDrama as DramaKey) : null
 
-  // --- Discover filters: year / rating floor / runtime ---
+  // --- Discover filters: year / age band ---
   // Validated like every other URL value — a hand-edited `year=abc` must not
   // poison the query key or ship `NaN` to TMDB.
   const yearFrom = useMemo(() => {
@@ -224,16 +224,10 @@ export default function App() {
     const n = parseInt(searchParams.get('year_to') || '', 10)
     return Number.isFinite(n) && n > 1800 && n < 2100 ? n : null
   }, [searchParams])
-  const ratingFloor = useMemo(() => {
-    const n = Number(searchParams.get('rating'))
-    return Number.isFinite(n) && n > 0 && n <= 10 ? n : null
-  }, [searchParams])
-  const rawRuntime = searchParams.get('runtime')
-  const runtimeBand: RuntimeBand | null = rawRuntime === 'short' || rawRuntime === 'medium' || rawRuntime === 'long' ? rawRuntime : null
   const rawAge = searchParams.get('age')
   const ageBand: AgeBand | null = rawAge === 'all' || rawAge === 'adult' ? rawAge : null
-  const discoverFilterValue: DiscoverFilterValue = { yearFrom, yearTo, ratingFloor, runtimeBand, ageBand }
-  const discoverFilterCount = (yearFrom !== null || yearTo !== null ? 1 : 0) + (ratingFloor !== null ? 1 : 0) + (runtimeBand !== null ? 1 : 0) + (ageBand !== null ? 1 : 0)
+  const discoverFilterValue: DiscoverFilterValue = { yearFrom, yearTo, ageBand }
+  const discoverFilterCount = (yearFrom !== null || yearTo !== null ? 1 : 0) + (ageBand !== null ? 1 : 0)
   const hasDiscoverFilters = discoverFilterCount > 0
 
   const [showGenres, setShowGenres] = useState(() => searchParams.get('filters') === '1')
@@ -324,7 +318,7 @@ export default function App() {
 
   // --- Current page query: exactly one full page per view ---
   // Two sources, one guarantee (a full, correctly-filtered page):
-  //   • any filter on (genre / type / platform / year / rating / runtime) → /discover,
+  //   • any filter on (genre / type / platform / year / age) → /discover,
   //     the only endpoint that can express those constraints server-side.
   //   • no filter at all → the curated feed endpoints, because /discover can only
   //     approximate Trending (popularity.desc ≠ TMDB's trending score) and the
@@ -338,12 +332,11 @@ export default function App() {
   // its own, so it counts as "filtered" even with every other pill untouched.
   const dramaCountries = activeDrama ? DRAMA_PRESETS[activeDrama].countries : []
   const useDiscover = activePlatform !== null || hasDiscoverFilters || contentType !== 'all' || activeGenres.length > 0 || activeDrama !== null
-  const runtime = runtimeBand ? runtimeRange(runtimeBand) : { from: null, to: null }
   const pageQuery = useQuery({
     // Every constraint is part of the key: changing one is a new fetch, never a
     // re-render of the previous filter's page.
-    queryKey: ['home', activeCategory, currentPage, activePlatform, region, locale, yearFrom, yearTo, ratingFloor, runtimeBand, ageBand, media, animeOnly, activeGenres.join(','), activeDrama],
-    queryFn: () => useDiscover
+    queryKey: ['home', activeCategory, currentPage, activePlatform, region, locale, yearFrom, yearTo, ageBand, media, animeOnly, activeGenres.join(','), activeDrama],
+    queryFn: ({ signal }) => useDiscover
       ? fetchDiscoverPage({
           sort: CATEGORY_SORT[activeCategory] ?? CATEGORY_SORT.now_playing,
           providerIds: activePlatform !== null ? [activePlatform] : [],
@@ -356,9 +349,6 @@ export default function App() {
           language: locale,
           yearFrom,
           yearTo,
-          ratingFloor,
-          runtimeFrom: runtime.from,
-          runtimeTo: runtime.to,
           media,
           genreIds: activeGenres,
           animeOnly,
@@ -366,10 +356,10 @@ export default function App() {
           originCountries: dramaCountries,
           // Page 1 spends one title on the hero — ask for a full grid underneath it.
           heroSlot: currentPage === 1,
+          signal,
         })
-      : fetchCuratedPage(endpoints.movie, endpoints.tv, currentPage, locale, { heroSlot: currentPage === 1 }),
-    // No placeholderData: the previous page belongs to a different filter, and
-    // painting it over the wait is the reported bug. Skeletons until it lands.
+      : fetchCuratedPage(endpoints.movie, endpoints.tv, currentPage, locale, { heroSlot: currentPage === 1, signal }),
+    placeholderData: keepPreviousData,
     retry: 2,
     retryDelay: 1000,
   })
@@ -447,7 +437,7 @@ export default function App() {
     .filter(g => g.name)
     .sort((a, b) => a.name.localeCompare(b.name)), [pageItems, activeGenres])
 
-  // Genre, type, platform and the year/rating/runtime constraints are all applied
+  // Genre, type, platform and the year/age constraints are all applied
   // by TMDB (see the pageQuery above), so the page that arrives is the final one.
   // The only local ordering is Now Playing: discover sorts the two halves but the
   // merged feed interleaves them, and a plain string sort keeps ISO dates
@@ -473,7 +463,11 @@ export default function App() {
   // must NOT scroll, which is why the scroll effect ignores page changes.
   const goToPage = useCallback((next: number) => {
     const page = Math.max(1, next)
-    updateParams({ page: page === 1 ? null : String(page) }, { push: true })
+    // Paging is a view change, so the filter panel closes with it — it used to
+    // stay open across pages, covering the grid the user had just asked for.
+    // The URL flag is cleared in the same write so Back/refresh agree.
+    updateParams({ page: page === 1 ? null : String(page), filters: null }, { push: true })
+    setShowGenres(false)
     scrollToGrid()
   }, [updateParams, scrollToGrid])
 
@@ -493,7 +487,10 @@ export default function App() {
     const next = activeGenres.includes(id)
       ? activeGenres.filter(g => g !== id)
       : [...activeGenres, id]
-    updateParams({ genres: next.length > 0 ? next.join(',') : null })
+    updateParams({
+      genres: next.length > 0 ? next.join(',') : null,
+      page: null,
+    })
   }, [activeGenres, updateParams])
 
   // Single-select platform filter — 'All' clears it. Changing it re-fetches page 1.
@@ -510,7 +507,10 @@ export default function App() {
 
   const setContentTypeFilter = useCallback((type: ContentType) => {
     // 'all' is the default view, so it drops the param rather than writing it.
-    updateParams({ type: type === 'all' ? null : type })
+    updateParams({
+      type: type === 'all' ? null : type,
+      page: null,
+    })
   }, [updateParams])
 
   // Drama presets are single-select — picking one drops the others. A preset
@@ -523,14 +523,12 @@ export default function App() {
     })
   }, [updateParams])
 
-  // Year / rating / runtime are server-side constraints, so any change starts a
-  // new result set — page resets, history entry replaced.
+  // Year / age are server-side constraints, so any change starts a new result
+  // set — page resets, history entry replaced.
   const setDiscoverFilters = useCallback((next: DiscoverFilterValue) => {
     updateParams({
       year_from: next.yearFrom === null ? null : String(next.yearFrom),
       year_to: next.yearTo === null ? null : String(next.yearTo),
-      rating: next.ratingFloor === null ? null : String(next.ratingFloor),
-      runtime: next.runtimeBand,
       age: next.ageBand,
       page: null,
     })
@@ -542,7 +540,7 @@ export default function App() {
   const resetFilters = useCallback(() => {
     updateParams({
       cat: null, genres: null, provider: null, type: null, page: null, drama: null,
-      year_from: null, year_to: null, rating: null, runtime: null, age: null,
+      year_from: null, year_to: null, age: null,
     })
   }, [updateParams])
 
@@ -764,7 +762,7 @@ export default function App() {
                     fewer than the page holds. Saying only the page total is what
                     produced the "says 20, shows 19" report — the count names the
                     grid and the hero is called out beside it. */}
-                {isPageFetching
+                {isPageFetching || pageQuery.isPlaceholderData
                   ? 'Loading…'
                   : filteredMovies.length === 0
                     ? 'No results on this page'
@@ -835,7 +833,7 @@ export default function App() {
                   <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Genre</p>
                   <div className="flex flex-wrap gap-2">
                     <button
-                      onClick={() => updateParams({ genres: null })}
+                      onClick={() => updateParams({ genres: null, page: null })}
                       className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                         activeGenres.length === 0
                           ? 'bg-accent text-black'
@@ -863,13 +861,19 @@ export default function App() {
                 {/* Year / rating / runtime — server-side via /discover */}
                 <DiscoverFilterSections value={discoverFilterValue} onChange={setDiscoverFilters} />
 
-                {/* Platform Section — server-side filter against the region catalog */}
+                {/* Platform Section — server-side filter against the region catalog.
+                    The region control sits in this header: the provider list is
+                    region-scoped, so which catalog is being filtered has to be
+                    visible right where the pills are, on every breakpoint. */}
                 <div className="mt-4 pb-4 border-b border-zinc-800/50">
-                  <div className="flex items-baseline gap-2 mb-3">
-                    <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold">Platform</p>
-                    {activePlatform !== null && (
-                      <span className="text-accent text-[10px] font-bold">filtering</span>
-                    )}
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="flex items-baseline gap-2">
+                      <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold">Platform</p>
+                      {activePlatform !== null && (
+                        <span className="text-accent text-[10px] font-bold">filtering</span>
+                      )}
+                    </div>
+                    <RegionSelect compact />
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -921,28 +925,9 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Drama presets — server-side origin-country views, not client
-                    filters. Each pill is its own /discover query shape. */}
-                <div className="mt-4 pb-4 border-b border-zinc-800/50">
-                  <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Drama</p>
-                  <div className="flex flex-wrap gap-2">
-                    {(Object.entries(DRAMA_PRESETS) as [DramaKey, { label: string }][]).map(([key, meta]) => (
-                      <button
-                        key={key}
-                        onClick={() => selectDrama(activeDrama === key ? null : key)}
-                        className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                          activeDrama === key
-                            ? 'bg-accent text-black'
-                            : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
-                        }`}
-                      >
-                        {meta.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Content Type Section */}
+                {/* Content Type Section — drama presets live here as type
+                    pills, not a separate section: each one is a type view
+                    (TV + origin country) and belongs next to the others. */}
                 <div className="mt-4 pb-4 border-b border-zinc-800/50">
                   <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Type</p>
                   <div className="flex flex-wrap gap-2">
@@ -956,12 +941,27 @@ export default function App() {
                         key={t.key}
                         onClick={() => setContentTypeFilter(t.key)}
                         className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                          contentType === t.key
+                          contentType === t.key && activeDrama === null
                             ? 'bg-accent text-black'
                             : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
                         }`}
                       >
                         {t.label}
+                      </button>
+                    ))}
+                    {/* Drama presets — server-side origin-country views, each
+                        one its own /discover query shape. Single-select. */}
+                    {(Object.entries(DRAMA_PRESETS) as [DramaKey, { label: string }][]).map(([key, meta]) => (
+                      <button
+                        key={key}
+                        onClick={() => selectDrama(activeDrama === key ? null : key)}
+                        className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                          activeDrama === key
+                            ? 'bg-accent text-black'
+                            : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
+                        }`}
+                      >
+                        {meta.label}
                       </button>
                     ))}
                   </div>
@@ -984,20 +984,11 @@ export default function App() {
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-8">
-            {gridMovies.map((movie, i) => (
-              <motion.article
+            {gridMovies.map((movie) => (
+              <article
                 key={`${activeCategory}-${movie.media_type ?? 'movie'}-${movie.id}`}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.98 }}
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.3,
-                  delay: Math.min(0.05 + i * 0.02, 0.4),
-                  ease: [0.16, 1, 0.3, 1],
-                }}
                 onClick={() => openDetail(movie)}
-                className="cursor-pointer relative hover:z-40"
+                className="cursor-pointer relative hover:z-40 group"
               >
                 <CardDetailPopup movie={movie} mediaType={movie.media_type === 'tv' ? 'tv' : 'movie'}>
                 <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
@@ -1007,19 +998,19 @@ export default function App() {
                         src={tmdbImage(movie.poster_path, 'poster', 'w342')}
                         alt={movie.title}
                         kind="poster"
-                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                         sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw"
                       />
                       {/* Gradient first, preview above it — the preview's pause
                           + title chrome must not be dimmed by this overlay. */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                       <TrailerHover mediaType={movie.media_type === 'tv' ? 'tv' : 'movie'} id={movie.id} title={movie.title} />
                     </>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-zinc-700 text-sm font-bold">{movie.title?.charAt(0)}</div>
                   )}
                   {/* Details indicator on hover */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300">
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                     <span className="bg-white text-black text-[10px] font-bold px-4 py-1.5 rounded-full shadow-lg">
                       Details
                     </span>
@@ -1052,7 +1043,7 @@ export default function App() {
                 {/* Caption outside the overflow-hidden box — visible at every
                     zoom level, and it grows the card instead of being cropped. */}
                 <div className="px-0.5 pt-2">
-                  <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5">{movie.title}</p>
+                  <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5 group-hover:text-accent transition-colors">{movie.title}</p>
                   <div className="flex items-center gap-1.5">
                     <span className="text-text-muted text-[9px] sm:text-[10px]">{formatDate(movie.release_date)}</span>
                     {movie.genre_ids?.[0] && GENRE_MAP[movie.genre_ids[0]] && (
@@ -1063,43 +1054,45 @@ export default function App() {
                     )}
                   </div>
                 </div>
-              </motion.article>
+              </article>
             ))}
           </div>
           )}
         </motion.div>
 
         {/* Pagination — Prev / Next only. One page in view at a time. */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="flex items-center justify-center gap-4 py-8 pb-12"
-        >
-          <button
-            onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage === 1 || isPageFetching}
-            aria-label="Previous page"
-            className="px-5 py-2.5 rounded-full text-xs font-bold bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-text-primary hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200 active:scale-95"
+        {filteredMovies.length > 0 && !isPageLoading && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="flex items-center justify-center gap-4 py-8 pb-12"
           >
-            ← Prev
-          </button>
-          <span className="text-text-muted text-xs font-mono tabular-nums min-w-[64px] text-center" aria-live="polite">
-            {isPageFetching ? '…' : `Page ${currentPage}`}
-          </span>
-          <button
-            onClick={() => goToPage(currentPage + 1)}
-            disabled={isPageFetching || currentPage >= totalPages}
-            aria-label="Next page"
-            className="px-5 py-2.5 rounded-full text-xs font-bold bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-text-primary hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200 active:scale-95"
-          >
-            Next →
-          </button>
-        </motion.div>
+            <button
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1 || isPageFetching}
+              aria-label="Previous page"
+              className="px-5 py-2.5 rounded-full text-xs font-bold bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-text-primary hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200 active:scale-95"
+            >
+              ← Prev
+            </button>
+            <span className="text-text-muted text-xs font-mono tabular-nums min-w-[64px] text-center" aria-live="polite">
+              {isPageFetching ? '…' : `Page ${currentPage}`}
+            </span>
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={isPageFetching || currentPage >= totalPages}
+              aria-label="Next page"
+              className="px-5 py-2.5 rounded-full text-xs font-bold bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-text-primary hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200 active:scale-95"
+            >
+              Next →
+            </button>
+          </motion.div>
+        )}
 
         {/* Empty state with smart suggestions — gated on the fetch having settled,
             otherwise a page that is still loading flashes "No results". */}
-        {filteredMovies.length === 0 && !isPageLoading && !isPageFetching && (
+        {filteredMovies.length === 0 && !isPageLoading && !isPageFetching && !pageQuery.isPlaceholderData && !pageQuery.isError && (
           <div className="text-center py-16">
             <p className="text-4xl mb-3">&#x1f50d;</p>
             <p className="text-text-primary text-sm font-bold mb-2">No results on this page</p>

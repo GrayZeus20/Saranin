@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, Link, useLocation } from 'react-router-dom'
-import { motion } from 'motion/react'
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import ScrollRow from '../components/ScrollRow'
 import { ImageWithFallback } from '../components/ImageWithFallback'
@@ -136,6 +135,7 @@ function originalCountryOf(detail: MovieDetail, alts: Array<{ iso_3166_1: string
 export default function MovieDetailPage() {
   const { id } = useParams<{ id: string }>()
   const location = useLocation()
+  const navigate = useNavigate()
   const isTv = location.pathname.startsWith('/tv/')
   const [detail, setDetail] = useState<MovieDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -350,12 +350,7 @@ export default function MovieDetailPage() {
         <Navbar />
 
         {/* Backdrop Hero */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8 }}
-          className="relative h-[40vh] sm:h-[50vh] md:h-[60vh]"
-        >
+        <div className="relative h-[40vh] sm:h-[50vh] md:h-[60vh]">
           {movie.backdrop_path ? (
             <>
               <ImageWithFallback
@@ -375,17 +370,12 @@ export default function MovieDetailPage() {
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/50 to-transparent" />
           <div className="absolute inset-0 bg-gradient-to-r from-surface/60 to-transparent" />
-        </motion.div>
+        </div>
 
         {/* Content */}
         <div className="relative z-10 -mt-32 sm:-mt-40 max-w-5xl mx-auto px-4 sm:px-6 md:px-8 pb-16">
           {/* Title Row */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="flex flex-col sm:flex-row gap-5 sm:gap-8 mb-8"
-          >
+          <div className="flex flex-col sm:flex-row gap-5 sm:gap-8 mb-8">
             <div className="relative shrink-0 w-36 sm:w-44 md:w-52 mx-auto sm:mx-0">
               <div className="relative overflow-hidden rounded-xl shadow-2xl border border-zinc-800">
                 {/* One degrade path for every image: a failed poster shows its
@@ -490,16 +480,11 @@ export default function MovieDetailPage() {
                 </div>
               )}
             </div>
-          </motion.div>
+          </div>
 
           {/* Trailer */}
           {trailer && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="mb-10"
-            >
+            <div className="mb-10">
               <h3 className="text-[10px] uppercase tracking-widest font-bold text-text-muted mb-4">Trailer</h3>
               <div className="relative aspect-video w-full rounded-xl overflow-hidden border border-zinc-800 bg-black">
                 {trailerPlaying ? (
@@ -536,22 +521,28 @@ export default function MovieDetailPage() {
                   </button>
                 )}
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* Cast */}
           {cast.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="mb-10"
-            >
+            <div className="mb-10">
               <h3 className="text-[10px] uppercase tracking-widest font-bold text-text-muted mb-4">Cast</h3>
               <ScrollRow label="Cast" className="-mx-1">
-                {cast.map((c, i) => (
-                  <motion.div key={c.id} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, delay: 0.1 + i * 0.05 }} className="shrink-0 w-20 sm:w-24 text-center">
-                    <Link to={`/person/${c.id}`} className="block">
+                {cast.map((c) => (
+                  <div key={c.id} className="shrink-0 w-20 sm:w-24 text-center">
+                    <div
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => navigate(`/person/${c.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          navigate(`/person/${c.id}`)
+                        }
+                      }}
+                      className="block cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-full"
+                    >
                       <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden bg-surface-card border border-zinc-800 mx-auto mb-2 hover:border-accent transition-colors">
                         <ImageWithFallback
                           src={tmdbImage(c.profile_path, 'profile', 'w185')}
@@ -563,22 +554,17 @@ export default function MovieDetailPage() {
                       </div>
                       <p className="text-text-primary text-[11px] font-bold line-clamp-1 hover:text-accent transition-colors">{c.name}</p>
                       <p className="text-text-muted text-[9px] line-clamp-1">{c.character}</p>
-                    </Link>
-                  </motion.div>
+                    </div>
+                  </div>
                 ))}
               </ScrollRow>
-            </motion.div>
+            </div>
           )}
 
           {/* Available Regions — a half-moon flag rail you can scroll or drag,
               plus a List button for the full country-by-country breakdown. */}
           {availableRegions.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.15 }}
-              className="mb-10"
-            >
+            <div className="mb-10">
               <div className="flex items-center justify-between gap-3 mb-4">
                 <h3 className="text-[10px] uppercase tracking-widest font-bold text-text-muted">
                   Available In These Countries
@@ -609,7 +595,7 @@ export default function MovieDetailPage() {
               <p className="text-text-muted text-[10px] mt-1">
                 Drag or scroll for more · tap a flag or <span className="font-bold">List</span> for every country
               </p>
-            </motion.div>
+            </div>
           )}
 
           {/* Full availability list — scrollable dialog, mounted only when open. */}
@@ -622,12 +608,7 @@ export default function MovieDetailPage() {
 
           {/* Production Companies */}
           {detail.production_companies?.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.25 }}
-              className="mb-10"
-            >
+            <div className="mb-10">
               <h3 className="text-[10px] uppercase tracking-widest font-bold text-text-muted mb-4">Production</h3>
               <div className="flex flex-wrap gap-3">
                 {detail.production_companies.map(c => (
@@ -655,45 +636,46 @@ export default function MovieDetailPage() {
                   </Link>
                 ))}
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* Similar Movies */}
           {similar.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="mb-10"
-            >
+            <div className="mb-10">
               <h3 className="text-[10px] uppercase tracking-widest font-bold text-text-muted mb-4">Similar {isTv ? 'TV Shows' : 'Movies'}</h3>
               <ScrollRow label={`Similar ${isTv ? 'TV shows' : 'movies'}`} className="-mx-1">
-                {similar.map((m, i) => (
-                  <motion.div
+                {similar.map((m) => (
+                  <div
                     key={m.id}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.1 + i * 0.04 }}
-                    className="shrink-0"
+                    className="shrink-0 group"
                   >
-                    <Link
-                      to={`/${isTv ? 'tv' : 'movie'}/${m.id}`}
-                      onClick={() => scrollRef.current?.scrollTo({ top: 0 })}
-                      className="block w-28 sm:w-32 cursor-pointer"
+                    <div
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => {
+                        navigate(`/${isTv ? 'tv' : 'movie'}/${m.id}`)
+                        scrollRef.current?.scrollTo({ top: 0 })
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          navigate(`/${isTv ? 'tv' : 'movie'}/${m.id}`)
+                          scrollRef.current?.scrollTo({ top: 0 })
+                        }
+                      }}
+                      className="block w-28 sm:w-32 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
                     >
                       <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
                         <ImageWithFallback
                           src={tmdbImage(m.poster_path, 'poster', 'w342')}
                           alt={m.title}
                           kind="poster"
-                          className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                           sizes="(min-width: 640px) 128px, 112px"
                         />
                         {/* Gradient first, preview above it — keeps the pause +
                             title chrome undimmed. */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                         <TrailerHover mediaType={isTv ? 'tv' : 'movie'} id={m.id} title={m.title} />
                         <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1 py-0.5 rounded">
                           ★ {m.vote_average?.toFixed(1)}
@@ -703,50 +685,51 @@ export default function MovieDetailPage() {
                           entry={{ id: m.id, media_type: isTv ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
                         />
                       </div>
-                      <p className="text-text-primary text-[11px] font-bold line-clamp-1 mt-1.5">{m.title}</p>
-                    </Link>
-                  </motion.div>
+                      <p className="text-text-primary text-[11px] font-bold line-clamp-1 mt-1.5 group-hover:text-accent transition-colors">{m.title}</p>
+                    </div>
+                  </div>
                 ))}
               </ScrollRow>
-            </motion.div>
+            </div>
           )}
           {/* Recommendations — "More Like This". Rendered after Similar; the
               list already excludes everything in that rail and this title. */}
           {recommendations.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.35 }}
-              className="mb-10"
-            >
+            <div className="mb-10">
               <h3 className="text-[10px] uppercase tracking-widest font-bold text-text-muted mb-4">More Like This</h3>
               <ScrollRow label="More like this" className="-mx-1">
-                {recommendations.map((m, i) => (
-                  <motion.div
+                {recommendations.map((m) => (
+                  <div
                     key={m.id}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.1 + i * 0.04 }}
-                    className="shrink-0"
+                    className="shrink-0 group"
                   >
-                    <Link
-                      to={`/${isTv ? 'tv' : 'movie'}/${m.id}`}
-                      onClick={() => scrollRef.current?.scrollTo({ top: 0 })}
-                      className="block w-28 sm:w-32 cursor-pointer"
+                    <div
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => {
+                        navigate(`/${isTv ? 'tv' : 'movie'}/${m.id}`)
+                        scrollRef.current?.scrollTo({ top: 0 })
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          navigate(`/${isTv ? 'tv' : 'movie'}/${m.id}`)
+                          scrollRef.current?.scrollTo({ top: 0 })
+                        }
+                      }}
+                      className="block w-28 sm:w-32 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
                     >
                       <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
                         <ImageWithFallback
                           src={tmdbImage(m.poster_path, 'poster', 'w342')}
                           alt={m.title}
                           kind="poster"
-                          className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                           sizes="(min-width: 640px) 128px, 112px"
                         />
                         {/* Gradient first, preview above it — keeps the pause +
                             title chrome undimmed (same rule as the rails). */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                         <TrailerHover mediaType={isTv ? 'tv' : 'movie'} id={m.id} title={m.title} />
                         <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1 py-0.5 rounded">
                           ★ {m.vote_average?.toFixed(1)}
@@ -756,12 +739,12 @@ export default function MovieDetailPage() {
                           entry={{ id: m.id, media_type: isTv ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
                         />
                       </div>
-                      <p className="text-text-primary text-[11px] font-bold line-clamp-1 mt-1.5">{m.title}</p>
-                    </Link>
-                  </motion.div>
+                      <p className="text-text-primary text-[11px] font-bold line-clamp-1 mt-1.5 group-hover:text-accent transition-colors">{m.title}</p>
+                    </div>
+                  </div>
                 ))}
               </ScrollRow>
-            </motion.div>
+            </div>
           )}
         </div>
 

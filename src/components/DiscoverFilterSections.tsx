@@ -1,16 +1,14 @@
-// Year / rating / runtime filter pills — one renderer shared by the home page
-// and CategoryPage so the two filter panels can never drift apart.
+// Year / age filter pills — one renderer shared by the home page and
+// CategoryPage so the two filter panels can never drift apart.
 
-import { runtimeRange, type RuntimeBand, type AgeBand } from '../utils/discover'
+import type { AgeBand } from '../utils/discover'
 
 // Age-rating band — server-side US certifications (see utils/discover: TMDB's
-// adult flag is always false on discover results). 'all' shows only the
-// family-friendly half, 'adult' only the R/TV-MA half; unset shows everything.
+// adult flag is always false on discover results). 'all' = family-friendly
+// half, 'adult' = R/TV-MA half; unset shows everything.
 export interface DiscoverFilterValue {
   yearFrom: number | null
   yearTo: number | null
-  ratingFloor: number | null
-  runtimeBand: RuntimeBand | null
   ageBand: AgeBand | null
 }
 
@@ -29,14 +27,6 @@ function yearPresets(): Array<{ label: string; from: number | null; to: number |
   ]
 }
 
-const RATING_OPTIONS = [6, 7, 8, 9]
-
-const RUNTIME_OPTIONS: Array<{ band: RuntimeBand; label: string }> = [
-  { band: 'short', label: 'Under 90m' },
-  { band: 'medium', label: '90–120m' },
-  { band: 'long', label: '120m+' },
-]
-
 // The two audience bands. Labels speak the user's language, not the MPAA's —
 // the certification wiring lives in utils/discover.
 const AGE_OPTIONS: Array<{ band: AgeBand; label: string; hint: string }> = [
@@ -48,18 +38,11 @@ const pillBase = 'shrink-0 inline-flex items-center justify-center min-h-[44px] 
 const pillOn = 'bg-accent text-black'
 const pillOff = 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
 
-function runtimeLabel(band: RuntimeBand): string {
-  const { from, to } = runtimeRange(band)
-  if (from === null && to !== null) return `${to}m or less`
-  if (from !== null && to === null) return `${from}m or more`
-  return `${from}–${to}m`
-}
-
 export function DiscoverFilterSections({ value, onChange }: {
   value: DiscoverFilterValue
   onChange: (next: DiscoverFilterValue) => void
 }) {
-  const { yearFrom, yearTo, ratingFloor, runtimeBand, ageBand } = value
+  const { yearFrom, yearTo, ageBand } = value
   const presets = yearPresets()
 
   const isActiveYear = (p: { from: number | null; to: number | null }) => p.from === yearFrom && p.to === yearTo
@@ -92,51 +75,6 @@ export function DiscoverFilterSections({ value, onChange }: {
         </div>
       </div>
 
-      {/* Rating floor Section */}
-      <div className="mt-4 pb-4 border-b border-zinc-800/50">
-        <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Rating</p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => onChange({ ...value, ratingFloor: null })}
-            className={`${pillBase} ${ratingFloor === null ? pillOn : pillOff}`}
-          >
-            Any
-          </button>
-          {RATING_OPTIONS.map((r) => (
-            <button
-              key={r}
-              onClick={() => onChange({ ...value, ratingFloor: ratingFloor === r ? null : r })}
-              className={`${pillBase} ${ratingFloor === r ? pillOn : pillOff}`}
-            >
-              ★ {r}+
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Runtime Section */}
-      <div className="mt-4 pb-4 border-b border-zinc-800/50">
-        <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Runtime</p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => onChange({ ...value, runtimeBand: null })}
-            className={`${pillBase} ${runtimeBand === null ? pillOn : pillOff}`}
-          >
-            Any
-          </button>
-          {RUNTIME_OPTIONS.map((o) => (
-            <button
-              key={o.band}
-              onClick={() => onChange({ ...value, runtimeBand: runtimeBand === o.band ? null : o.band })}
-              className={`${pillBase} ${runtimeBand === o.band ? pillOn : pillOff}`}
-              title={`Runtime ${runtimeLabel(o.band)}`}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Age Rating Section — US-certification bands server-side */}
       <div className="mt-4 pb-4 border-b border-zinc-800/50">
         <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Age Rating</p>
@@ -145,7 +83,7 @@ export function DiscoverFilterSections({ value, onChange }: {
             onClick={() => onChange({ ...value, ageBand: null })}
             className={`${pillBase} ${ageBand === null ? pillOn : pillOff}`}
           >
-            Any
+            All
           </button>
           {AGE_OPTIONS.map((o) => (
             <button

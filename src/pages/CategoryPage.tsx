@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams, useNavigationType } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'motion/react'
 import { ImageWithFallback } from '../components/ImageWithFallback'
 import { TrailerHover } from '../components/TrailerHover'
 import { CardDetailPopup } from '../components/CardDetailPopup'
-import Navbar from '../components/Navbar'
+import Navbar, { RegionSelect } from '../components/Navbar'
 import Footer from '../components/Footer'
 import { WatchButton } from '../components/WatchButton'
 import { tmdbImage } from '../utils/imageSizes'
@@ -16,8 +16,8 @@ import { useRegion } from '../utils/region'
 import { useLocale } from '../utils/locale'
 import { useDocumentTitle } from '../utils/useDocumentTitle'
 import {
-  fetchDiscoverPage, fetchCuratedPage, runtimeRange, GRID_PAGE_SIZE,
-  type CombinedPage, type DiscoverSort, type DiscoverMedia, type RuntimeBand, type AgeBand,
+  fetchDiscoverPage, fetchCuratedPage, GRID_PAGE_SIZE,
+  type CombinedPage, type DiscoverSort, type DiscoverMedia, type AgeBand,
 } from '../utils/discover'
 import { DiscoverFilterSections, type DiscoverFilterValue } from '../components/DiscoverFilterSections'
 
@@ -92,7 +92,7 @@ export default function CategoryPage() {
   const contentType: ContentType = rawType === 'movie' || rawType === 'tv' || rawType === 'anime' || rawType === 'all' ? rawType : 'all'
   const [showFilters, setShowFilters] = useState(false)
 
-  // --- Discover filters: year / rating floor / runtime ---
+  // --- Discover filters: year / age band ---
   const yearFrom = useMemo(() => {
     const n = parseInt(searchParams.get('year_from') || '', 10)
     return Number.isFinite(n) && n > 1800 && n < 2100 ? n : null
@@ -101,19 +101,13 @@ export default function CategoryPage() {
     const n = parseInt(searchParams.get('year_to') || '', 10)
     return Number.isFinite(n) && n > 1800 && n < 2100 ? n : null
   }, [searchParams])
-  const ratingFloor = useMemo(() => {
-    const n = Number(searchParams.get('rating'))
-    return Number.isFinite(n) && n > 0 && n <= 10 ? n : null
-  }, [searchParams])
-  const rawRuntime = searchParams.get('runtime')
-  const runtimeBand: RuntimeBand | null = rawRuntime === 'short' || rawRuntime === 'medium' || rawRuntime === 'long' ? rawRuntime : null
   const rawAge = searchParams.get('age')
   const ageBand: AgeBand | null = rawAge === 'all' || rawAge === 'adult' ? rawAge : null
   // Drama presets — same single-select shape as home (App.tsx documents them).
   const rawDrama = searchParams.get('drama')
   const activeDrama: DramaKey | null = rawDrama && rawDrama in DRAMA_PRESETS ? (rawDrama as DramaKey) : null
-  const discoverFilterValue: DiscoverFilterValue = { yearFrom, yearTo, ratingFloor, runtimeBand, ageBand }
-  const discoverFilterCount = (yearFrom !== null || yearTo !== null ? 1 : 0) + (ratingFloor !== null ? 1 : 0) + (runtimeBand !== null ? 1 : 0) + (ageBand !== null ? 1 : 0)
+  const discoverFilterValue: DiscoverFilterValue = { yearFrom, yearTo, ageBand }
+  const discoverFilterCount = (yearFrom !== null || yearTo !== null ? 1 : 0) + (ageBand !== null ? 1 : 0)
   const hasDiscoverFilters = discoverFilterCount > 0
 
   // Single writer for the URL. `replace` by default so filter toggling does not
@@ -142,7 +136,6 @@ export default function CategoryPage() {
 
   useDocumentTitle(`${TITLES[categoryKey] || 'Popular'} — SARANIN.`)
 
-  const runtime = runtimeBand ? runtimeRange(runtimeBand) : { from: null, to: null }
   // Same split as the home page. /discover can only approximate a curated row
   // (popularity.desc is not TMDB's trending score), so an unfiltered category view
   // keeps its real feed pair. The moment any constraint is on, the view moves to
@@ -150,11 +143,11 @@ export default function CategoryPage() {
   // after arrival is what used to leave the grid short of its own label.
   const endpoints = ENDPOINT_MAP[categoryKey] ?? ENDPOINT_MAP.popular
   const useDiscover = activePlatform !== null || hasDiscoverFilters || contentType !== 'all' || activeGenres.length > 0 || activeDrama !== null
-  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
+  const { data, isLoading, isFetching, isPlaceholderData, isError, error, refetch } = useQuery({
     // Every server-side constraint belongs in the key: a filter change must be a
     // new fetch, never a re-render of the old (wrong-filter) page.
-    queryKey: ['category', type, page, activePlatform, region, locale, yearFrom, yearTo, ratingFloor, runtimeBand, ageBand, media, animeOnly, activeGenres.join(','), activeDrama],
-    queryFn: async (): Promise<CombinedPage> => useDiscover
+    queryKey: ['category', type, page, activePlatform, region, locale, yearFrom, yearTo, ageBand, media, animeOnly, activeGenres.join(','), activeDrama],
+    queryFn: async ({ signal }): Promise<CombinedPage> => useDiscover
       ? fetchDiscoverPage({
           sort,
           providerIds: activePlatform !== null ? [activePlatform] : [],
@@ -166,18 +159,15 @@ export default function CategoryPage() {
           language: locale,
           yearFrom,
           yearTo,
-          ratingFloor,
-          runtimeFrom: runtime.from,
-          runtimeTo: runtime.to,
           media,
           genreIds: activeGenres,
           animeOnly,
           ageBand,
           originCountries: dramaCountries,
+          signal,
         })
-      : fetchCuratedPage(endpoints.movie, endpoints.tv, page, locale),
-    // No placeholderData: the previous page belongs to a different filter. Showing
-    // it is the reported bug — the grid must show skeletons until its own data lands.
+      : fetchCuratedPage(endpoints.movie, endpoints.tv, page, locale, { signal }),
+    placeholderData: keepPreviousData,
     retry: 2,
     retryDelay: 1000,
   })
@@ -247,13 +237,11 @@ export default function CategoryPage() {
     updateParams({ drama, type: drama ? 'tv' : null, page: null })
   }, [updateParams])
 
-  // Year / rating / runtime are server-side constraints — page resets with them.
+  // Year / age are server-side constraints — page resets with them.
   const setDiscoverFilters = useCallback((next: DiscoverFilterValue) => {
     updateParams({
       year_from: next.yearFrom === null ? null : String(next.yearFrom),
       year_to: next.yearTo === null ? null : String(next.yearTo),
-      rating: next.ratingFloor === null ? null : String(next.ratingFloor),
-      runtime: next.runtimeBand,
       age: next.ageBand,
       page: null,
     })
@@ -281,7 +269,10 @@ export default function CategoryPage() {
 
   const goToPage = (next: number) => {
     const clamped = Math.max(1, Math.min(totalPages, next))
+    // Paging closes the filter panel — it used to stay open over the grid the
+    // user had just asked for. Panel state is local here, so no URL flag.
     updateParams({ page: clamped === 1 ? null : String(clamped) }, { push: true })
+    setShowFilters(false)
     // Paging is the only action that scrolls — see the scroll note above.
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -289,7 +280,7 @@ export default function CategoryPage() {
   const resetAllFilters = useCallback(() => {
     updateParams({
       page: null, genres: null, provider: null, type: null, drama: null,
-      year_from: null, year_to: null, rating: null, runtime: null, age: null,
+      year_from: null, year_to: null, age: null,
     })
   }, [updateParams])
 
@@ -362,7 +353,7 @@ export default function CategoryPage() {
                 <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Genre</p>
                 <div className="flex flex-wrap gap-2">
                   <button
-                    onClick={() => updateParams({ genres: null })}
+                    onClick={() => updateParams({ genres: null, page: null })}
                     className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                       activeGenres.length === 0
                         ? 'bg-accent text-black'
@@ -378,7 +369,7 @@ export default function CategoryPage() {
                         const next = activeGenres.includes(g.id)
                           ? activeGenres.filter(id => id !== g.id)
                           : [...activeGenres, g.id]
-                        updateParams({ genres: next.length > 0 ? next.join(',') : null })
+                        updateParams({ genres: next.length > 0 ? next.join(',') : null, page: null })
                       }}
                       className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
                         activeGenres.includes(g.id)
@@ -392,34 +383,19 @@ export default function CategoryPage() {
                 </div>
               </div>
 
-              {/* Year / Rating / Runtime — server-side discover constraints */}
+              {/* Year / Age — server-side discover constraints */}
               <DiscoverFilterSections value={discoverFilterValue} onChange={setDiscoverFilters} />
 
-              {/* Drama presets — same pills as home */}
+              {/* Platform Section — server-side filter against the region catalog.
+                  The region control lives in this header: the provider list is
+                  region-scoped, so the active catalog is visible where it acts. */}
               <div className="pt-4 pb-4 border-b border-zinc-800/50">
-                <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Drama</p>
-                <div className="flex flex-wrap gap-2">
-                  {(Object.entries(DRAMA_PRESETS) as [DramaKey, { label: string }][]).map(([key, meta]) => (
-                    <button
-                      key={key}
-                      onClick={() => selectDrama(activeDrama === key ? null : key)}
-                      className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                        activeDrama === key
-                          ? 'bg-accent text-black'
-                          : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
-                      }`}
-                    >
-                      {meta.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Platform Section — server-side filter against the region catalog */}
-              <div className="pt-4 pb-4 border-b border-zinc-800/50">
-                <div className="flex items-baseline gap-2 mb-3">
-                  <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold">Platform</p>
-                  {activePlatform !== null && <span className="text-accent text-[10px] font-bold">filtering</span>}
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold">Platform</p>
+                    {activePlatform !== null && <span className="text-accent text-[10px] font-bold">filtering</span>}
+                  </div>
+                  <RegionSelect compact />
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -471,7 +447,7 @@ export default function CategoryPage() {
                 )}
               </div>
 
-              {/* Content Type Section */}
+              {/* Content Type Section — drama presets are type pills here too. */}
               <div className="pt-4 pb-4 border-b border-zinc-800/50">
                 <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Type</p>
                 <div className="flex flex-wrap gap-2">
@@ -483,14 +459,28 @@ export default function CategoryPage() {
                   ] as { key: ContentType; label: string }[]).map(t => (
                     <button
                       key={t.key}
-                      onClick={() => updateParams({ type: t.key === 'all' ? null : t.key })}
+                      onClick={() => updateParams({ type: t.key === 'all' ? null : t.key, page: null })}
                       className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                        contentType === t.key
+                        contentType === t.key && activeDrama === null
                           ? 'bg-accent text-black'
                           : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
                       }`}
                     >
                       {t.label}
+                    </button>
+                  ))}
+                  {/* Drama presets — same pills as home, single-select. */}
+                  {(Object.entries(DRAMA_PRESETS) as [DramaKey, { label: string }][]).map(([key, meta]) => (
+                    <button
+                      key={key}
+                      onClick={() => selectDrama(activeDrama === key ? null : key)}
+                      className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
+                        activeDrama === key
+                          ? 'bg-accent text-black'
+                          : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
+                      }`}
+                    >
+                      {meta.label}
                     </button>
                   ))}
                 </div>
@@ -501,7 +491,7 @@ export default function CategoryPage() {
 
         {/* Results count — the grid shows exactly what is counted here. */}
         <p className="text-text-muted text-xs mb-4">
-          {isFetching
+          {isFetching || isPlaceholderData
             ? 'Loading…'
             : filteredMovies.length > 0
               ? `${filteredMovies.length} results on this page`
@@ -573,7 +563,7 @@ export default function CategoryPage() {
 
         {/* Empty state with smart suggestions — only once the fetch has settled,
             so an in-flight page cannot flash "No results". */}
-        {filteredMovies.length === 0 && !isLoading && !isFetching && (
+        {filteredMovies.length === 0 && !isLoading && !isFetching && !isPlaceholderData && !isError && (
           <div className="text-center py-16">
             <p className="text-4xl mb-3">&#x1f50d;</p>
             <p className="text-text-primary text-sm font-bold mb-2">No results on this page</p>
@@ -590,7 +580,7 @@ export default function CategoryPage() {
               </button>
               {contentType === 'anime' && (
                 <button
-                  onClick={() => updateParams({ type: null })}
+                  onClick={() => updateParams({ type: null, page: null })}
                   className="text-xs font-medium px-4 py-2 rounded-full bg-surface-elevated text-text-muted border border-zinc-800 hover:border-accent hover:text-accent transition-all"
                 >
                   Show All Content
@@ -598,7 +588,7 @@ export default function CategoryPage() {
               )}
               {contentType !== 'anime' && (
                 <button
-                  onClick={() => updateParams({ type: 'anime' })}
+                  onClick={() => updateParams({ type: 'anime', page: null })}
                   className="text-xs font-medium px-4 py-2 rounded-full bg-surface-elevated text-text-muted border border-zinc-800 hover:border-accent hover:text-accent transition-all"
                 >
                   Browse Anime
@@ -615,27 +605,29 @@ export default function CategoryPage() {
         )}
 
         {/* Pagination — Prev / Next only. One page in view at a time. */}
-        <div className="flex items-center justify-center gap-4 py-8">
-          <button
-            onClick={() => goToPage(page - 1)}
-            disabled={page === 1 || isFetching}
-            aria-label="Previous page"
-            className="px-5 py-2.5 rounded-full text-xs font-bold bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-text-primary hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200 active:scale-95"
-          >
-            ← Prev
-          </button>
-          <span className="text-text-muted text-xs font-mono tabular-nums min-w-[64px] text-center" aria-live="polite">
-            {isFetching ? '…' : `Page ${page}`}
-          </span>
-          <button
-            onClick={() => goToPage(page + 1)}
-            disabled={isFetching || page >= totalPages}
-            aria-label="Next page"
-            className="px-5 py-2.5 rounded-full text-xs font-bold bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-text-primary hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200 active:scale-95"
-          >
-            Next →
-          </button>
-        </div>
+        {filteredMovies.length > 0 && !isLoading && (
+          <div className="flex items-center justify-center gap-4 py-8">
+            <button
+              onClick={() => goToPage(page - 1)}
+              disabled={page === 1 || isFetching}
+              aria-label="Previous page"
+              className="px-5 py-2.5 rounded-full text-xs font-bold bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-text-primary hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200 active:scale-95"
+            >
+              ← Prev
+            </button>
+            <span className="text-text-muted text-xs font-mono tabular-nums min-w-[64px] text-center" aria-live="polite">
+              {isFetching ? '…' : `Page ${page}`}
+            </span>
+            <button
+              onClick={() => goToPage(page + 1)}
+              disabled={isFetching || page >= totalPages}
+              aria-label="Next page"
+              className="px-5 py-2.5 rounded-full text-xs font-bold bg-surface-elevated border border-zinc-800 text-text-muted hover:border-accent hover:text-text-primary hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200 active:scale-95"
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </div>
       <Footer />
     </div>

@@ -37,7 +37,7 @@ export function ScrollRow({ children, label, className = '' }: ScrollRowProps) {
   const trackRef = useRef<HTMLDivElement>(null)
   // Kept in a ref, not state: this is written on every pointermove and must not
   // trigger a render mid-gesture.
-  const drag = useRef({ active: false, startX: 0, startScroll: 0, moved: false })
+  const drag = useRef({ active: false, startX: 0, startScroll: 0, moved: false, pointerId: -1 })
   const [dragging, setDragging] = useState(false)
   const [hasLeft, setHasLeft] = useState(false)
   const [hasRight, setHasRight] = useState(false)
@@ -81,9 +81,14 @@ export function ScrollRow({ children, label, className = '' }: ScrollRowProps) {
 
   const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'touch') return
+    // Interactive controls that must keep their own gesture instead of starting
+    // a rail drag (watchlist save button, inputs, or explicit no-drag controls).
+    // Cards themselves (including country chip buttons and tile links) remain draggable.
+    const target = e.target as Element | null
+    if (target?.closest?.('button[aria-label*="watchlist" i], input, select, textarea, [data-no-drag]')) return
     const el = trackRef.current
     if (!el) return
-    drag.current = { active: true, startX: e.clientX, startScroll: el.scrollLeft, moved: false }
+    drag.current = { active: true, startX: e.clientX, startScroll: el.scrollLeft, moved: false, pointerId: e.pointerId }
   }, [])
 
   const onPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
@@ -104,20 +109,38 @@ export function ScrollRow({ children, label, className = '' }: ScrollRowProps) {
     el.scrollLeft = state.startScroll - delta
   }, [])
 
-  const endDrag = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+  const endDrag = useCallback((e?: ReactPointerEvent<HTMLDivElement>) => {
     const state = drag.current
     if (!state.active) return
     const el = trackRef.current
     state.active = false
     setDragging(false)
     try {
-      el?.releasePointerCapture?.(e.pointerId)
+      const id = e?.pointerId ?? state.pointerId
+      if (id >= 0) el?.releasePointerCapture?.(id)
     } catch {
       // Capture is already gone (pointercancel) — nothing to release.
     }
     // `state.moved` stays true on purpose: the click event fires after
     // pointerup, and onClickCapture needs to see it to swallow that click.
   }, [])
+
+  // Safety net: if the pointerup is lost — it lands on a hover preview or on a
+  // captured element that unmounted — the drag would stay "active" and every
+  // later pointermove would keep scrolling the rail from a stale origin. That
+  // is the "drag stopped working after hovering a while" report. A document
+  // listener ends the gesture wherever the release happens.
+  useEffect(() => {
+    const onUp = () => endDrag()
+    document.addEventListener('pointerup', onUp, true)
+    document.addEventListener('pointercancel', onUp, true)
+    window.addEventListener('blur', onUp)
+    return () => {
+      document.removeEventListener('pointerup', onUp, true)
+      document.removeEventListener('pointercancel', onUp, true)
+      window.removeEventListener('blur', onUp)
+    }
+  }, [endDrag])
 
   // Capture phase so a card's own onClick never sees the click that ended a drag.
   const onClickCapture = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
@@ -169,7 +192,8 @@ export function ScrollRow({ children, label, className = '' }: ScrollRowProps) {
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}
-          onPointerCancel={endDrag}
+          onPointerCancel={() => endDrag()}
+          onDragStart={(e) => e.preventDefault()}
           onClickCapture={onClickCapture}
           className={trackClasses}
         >

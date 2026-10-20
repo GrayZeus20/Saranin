@@ -235,14 +235,9 @@ export default function CompanyDetailPage() {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
-          {[...movies, ...tvShows].map((item, i) => (
-            <motion.div
-              // movie and tv ids are independent TMDB namespaces and overlap
-              // constantly — the bare id collided across the two kind lists.
+          {[...movies, ...tvShows].map((item) => (
+            <div
               key={`${item.media_type}-${item.id}`}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: i * 0.05 }}
             >
               <Link to={`/${item.media_type}/${item.id}`} className="group block">
                 <div className="relative aspect-[2/3] overflow-hidden rounded-xl bg-surface-card border border-zinc-800 transition-transform duration-300 group-hover:scale-105 group-hover:border-accent/50">
@@ -267,7 +262,7 @@ export default function CompanyDetailPage() {
                 <h3 className="mt-3 text-text-primary text-sm font-bold line-clamp-1 group-hover:text-accent transition-colors">{item.title}</h3>
                 <p className="text-text-muted text-[10px]">{item.release_date?.split('-')[0] || item.first_air_date?.split('-')[0]}</p>
               </Link>
-            </motion.div>
+            </div>
           ))}
         </div>
 

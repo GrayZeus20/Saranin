@@ -1,6 +1,19 @@
 # Tasks
 
-## Deepscan pass — error hunt (2026-10-17)
+## Filter race condition & premature empty-state fix (2026-10-20)
+
+Request: "perbaiki bug ketika saya filter terkadang dia tidak menemukan tapi sebenarnya data nya belum sempat ter ambil, perbaiki bug serupa layaknya programer profesional"
+
+Root causes identified and fixed across `App.tsx`, `CategoryPage.tsx`, `SearchPage.tsx`, and `discover.ts`:
+1. **Premature "No results found" flash**: TanStack Query without `placeholderData: keepPreviousData` cleared query results immediately on key changes. Component empty-state gates checked `filteredMovies.length === 0` while the background query was in-flight, rendering "No results found" for a split second before data arrived. Fixed with `keepPreviousData` + gating empty states on `!isFetching && !isPlaceholderData`.
+2. **Missing AbortSignal passthrough**: Fast clicking between filter pills or search terms left abandoned network requests in the API concurrency queue (semaphore max 6, pacing 120ms). Added `signal: optSignal` / `{ signal }` passthrough to `fetchDiscoverPage`, `fetchCuratedPage`, and `fetchWithRateLimit` so obsolete requests abort immediately without blocking newer requests.
+3. **Cross-media genre mismatch (Movie vs TV)**: TMDB has disjoint IDs for genres (e.g. Action: 28 for Movie, 10759 for TV; Sci-Fi & Fantasy: 14/878 for Movie, 10765 for TV). Filtering by "Action" on TV/Sinetron returned 0 results because Movie ID 28 was sent to `/discover/tv`. Added `mapGenresForKind()` in `discover.ts` to map genre IDs across media types seamlessly.
+4. **Top-rated vote floor wiping regional series**: Sinetron (`originCountries: ['ID']`) and Dracin (`['CN']`) series have far fewer TMDB user votes than Hollywood blockbusters. The default `vote_count.gte=200` caused top-rated Indonesian/regional content to return 0 results. Added adaptive `REGIONAL_VOTE_COUNT_FLOOR = 5` for regional content.
+5. **Stale page offsets on filter change**: When browsing page > 1, changing genre or type pills without resetting page caused TMDB to query page > 1 of a 1-page filtered result set, returning 0 results immediately. Ensured all filter changes (`toggleGenre`, `setContentTypeFilter`, `selectType`, etc.) reset `page: null`.
+6. **Phantom pagination on empty states**: Pagination controls previously rendered above or below empty state panels even when 0 items were displayed. Gated pagination rendering to only display when `filteredMovies.length > 0`.
+
+Gate: `npx tsc --noEmit` clean · `npm run test:drag` pass (0 console errors) · `npm run build` green.
+
 
 Request: "deepscan cari error". Method: strict tsc (`--noUnusedLocals
 --noUnusedParameters`), grep lensa (debug leftovers, flag-emoji doubling, DOM
@@ -309,3 +322,144 @@ Root cause of the image outage (found in this pass):
   `public/_headers` and `vite.config.js` restored every route (company 139/139,
   person 23/23, home 63/69, detail 43/58) with 0 failures.
 
+
+## Polish pass 6 — filter set, preview chrome, grid shortfall, overflow (2026-10-19)
+
+Request: perbaiki tampilan error/over di desktop+mobile · platform filter → Netflix/HBO/Disney/
+Prime/Viu/WeTV/Bstation · age cuma 3 (All / All Ages / 18+) · hapus filter runtime+rating ·
+tahun auto pakai tahun sekarang · drama masuk ke Type · hover preview tanpa icon pause ·
+kadang grid <20 setelah filter · hover lama bikin drag rail mati · filter auto-hide saat pindah page ·
+desktop tidak melihat region/platform yang tersedia.
+
+Plan (1 line per step + files touched) — ALL DONE:
+- [x] 1. `src/utils/discover.ts` — buang ratingFloor/runtime (type + params); single-kind heroSlot
+      ambil dua page TMDB (1+2, 3+4, …) lalu dedupe → 20 grid + 1 hero.
+- [x] 2. `src/components/DiscoverFilterSections.tsx` — section Rating + Runtime dihapus; Age jadi
+      3 pill (All / All Ages / 18+).
+- [x] 3. `src/App.tsx` + `src/pages/CategoryPage.tsx` — state/param rating+runtime dibuang, drama
+      masuk ke dalam Type pills (Sinetron/Drakor/Dracin), filter panel auto-hide saat pindah page,
+      RegionSelect di header section Platform (paritas desktop/mobile).
+- [x] 4. `src/utils/providers.ts` — FEATURED_ORDER dikurasi ke 7 layanan; long tail dibuang.
+- [x] 5. `src/components/TrailerHover.tsx` — glyph pause + title bar dihapus; preview murni.
+- [x] 6. `src/components/CardDetailPopup.tsx` — portal + position:fixed saat open; pointerdown di
+      luar panel menutupnya; ScrollRow `endDrag` juga dipanggil dari document pointerup.
+- [x] 7. Verify (semua hijau).
+
+Runtime proof:
+- [CLAIM] tsc + build bersih — [PROOF] `npx tsc --noEmit` exit 0; `npm run build` → 524 modules,
+  built in 4.06s, 0 error.
+- [CLAIM] overflow hilang — [PROOF] 390px: `documentElement.scrollWidth` 385 vs innerWidth 390
+  (dulu 454); 0 elemen terpotong; 1440px: 1434 vs 1440.
+- [CLAIM] grid penuh di single-kind — [PROOF] `/?type=movie`: label "20 in grid + 1 featured",
+  20 `article`; page 2 label "20 in grid", 20 tiles.
+- [CLAIM] age 3 pill — [PROOF] section Age Rating = ["All","All Ages","18+"]; klik 18+ →
+  url `?filters=1&age=adult`, 20 tiles.
+- [CLAIM] platform dikurasi + region di header — [PROOF] section Platform = ID + All/Netflix/
+  HBO Max/Disney+/Amazon Prime Video/Viu/WeTV; RegionSelect ada di header section.
+- [CLAIM] drama di Type — [PROOF] section Type = All/Movies/TV Series/Anime/Sinetron/Drakor/Dracin;
+  klik Drakor → `?drama=drakor&type=tv`, 20 tiles, 20 badge TV.
+- [CLAIM] preview murni — [PROOF] hover 4s: iframe ada, layer children = [IFRAME] saja,
+  0 `svg rect[x=6]`, 0 title bar.
+- [CLAIM] filter auto-hide saat pindah page — [PROOF] `?type=movie&filters=1` → Next →
+  `?type=movie&page=2`, panel tertutup, 20 tiles. CategoryPage sama (`filters=1&page=2`).
+- [CLAIM] popup aman di portal — [PROOF] hover kartu grid: panel di `<body>`, position fixed,
+  left 60 right 316 (dalam 1440), scrollWidth tidak bertambah; klik link panel → /movie/1255833.
+- [CLAIM] hover lama tidak mematikan drag — [PROOF] hover 7s lalu drag: rail bergerak 180px,
+  20 tiles tetap, popup tertutup saat pointerdown.
+- [CLAIM] dragtest hijau — [PROOF] `npm run test:drag` pass: true, 9/9 checks, 0 console error.
+
+## Deepscan pass 7 — comprehensive sweep & drag arbitration fixes (2026-10-20)
+
+Request: "deepscan dan perbaiki".
+
+Method: strict tsc (`--noUnusedLocals --noUnusedParameters`), full production build (`npm run build`),
+standard drag test suite (`npm run test:drag`), and a headless Chromium CDP sweep across 10 routes on desktop
+(1440x900) and 5 routes on mobile (390x844), checking horizontal overflow, console errors, unhandled rejections,
+DOM nesting, CardDetailPopup positioning, and live mouse drag on all horizontal rails.
+
+Issues found & resolved:
+1. `ScrollRow.tsx` — `onPointerDown` had an overly broad interactive check:
+   `if (target?.closest?.('button, a, input, select, textarea')) return`.
+   This prevented mouse drag gestures on rails containing `<button>` or `<a>` elements (e.g. `RegionFlagRail`
+   where each country chip is a `<button>`, and cards containing `<Link>`/`<button>`).
+   *Fix*: Refined check to only non-drag interactive controls:
+   `target?.closest?.('button[aria-label*="watchlist" i], input, select, textarea, [data-no-drag]')`.
+   Drag gesture continues to use `onClickCapture` with `state.moved` (> 5px) to swallow trailing click events.
+2. `MovieDetailPage.tsx` — Similar movies and Recommendations wrapped cards in `<Link to="...">`, and inside
+   each card was a `<WatchButton>` (which renders `<button type="button">`).
+   *Issue*: Invalid DOM nesting (`<button>` inside `<a>`) which also interfered with drag & keyboard navigation.
+   *Fix*: Converted Cast, Similar movies, and More like this cards from `<Link>` to keyboard-accessible
+   `role="link"` tiles with `tabIndex={0}`, `onClick` (navigating via `useNavigate`), and `onKeyDown` (`Enter`/`Space`).
+3. Browser native image drag (`dragstart:IMG`) aborting rail drag:
+   *Issue*: In rails with plain profile/poster images without overlay divs (such as the Cast rail), dragging
+   directly on an `<img>` triggered the browser's native HTML5 image drag (`dragstart:IMG`), which fired
+   `pointercancel` and stopped pointer tracking after ~21px.
+   *Fix*: Added `onDragStart={(e) => e.preventDefault()}` on `ScrollRow` track and added explicit
+   `.scroll-row__track img { -webkit-user-drag: none; user-drag: none; user-select: none; }` in `src/index.css`.
+   Cast rail now smoothly scrolls across its full range (moved 108px to end of track), and all other rails
+   move 250px without interruption.
+
+Runtime proof:
+- [CLAIM] strict tsc bersih — [PROOF] `npx tsc --noEmit --noUnusedLocals --noUnusedParameters` exit code 0.
+- [CLAIM] build bersih — [PROOF] `npm run build` → 527 modules transformed, built in 5.08s, 0 errors.
+- [CLAIM] drag test suite hijau — [PROOF] `npm run test:drag` → 9/9 checks passed, 0 console errors.
+- [CLAIM] headless sweep bersih di desktop & mobile — [PROOF] 0 horizontal overflow (scrollWidth <= innerWidth),
+  0 console errors, 0 illegal DOM nesting violations across Home, Categories, Movie Detail, TV Detail,
+  Person Detail, Company Detail, Search, and Watchlist.
+- [CLAIM] semua rail di detail page draggable — [PROOF] Cast rail moved 108px (full overflow), Available Regions
+  moved 250px, Similar movies moved 250px, More like this moved 250px.
+
+## Removal of AI UI Generation Transition (2026-10-20)
+
+Request: "hilangkan transisi ai pada card di home" (dan konfirmasi untuk Category).
+
+Changes:
+1. `src/App.tsx` (Home grid):
+   - Removed `useGeneratedGrid` hook and `gridRef`.
+   - Restored standard clean entrance animations via `motion.article` with staggered ease.
+2. `src/pages/CategoryPage.tsx` (Category grid):
+   - Removed `useGeneratedGrid` hook and `gridRef`.
+3. `src/main.tsx`:
+   - Removed global `ui-generation.css` import.
+4. Cleaned up deleted vendored runtime:
+   - Removed `src/utils/useGeneratedGrid.ts` and `src/lib/` directory (`ui-generation.js`, `ui-generation.css`, `ui-generation.d.ts`).
+   - Bundle size decreased: `index.js` dropped by ~21.5 kB (from 161.89 kB to 140.32 kB), `CategoryPage.js` dropped by ~21.4 kB (from 37.16 kB to 15.79 kB).
+
+Runtime proof:
+- [CLAIM] strict tsc bersih — [PROOF] `npx tsc --noEmit --noUnusedLocals --noUnusedParameters` exit code 0.
+- [CLAIM] build bersih — [PROOF] `npm run build` → 524 modules transformed, built in 5.50s, 0 errors.
+- [CLAIM] drag test suite hijau — [PROOF] `npm run test:drag` → 9/9 checks passed, 0 console errors.
+
+## Deepscan: Card Artificial Transition Removal & UI Clipping/Overflow Fixes (2026-10-20)
+
+Request: "deepscan and fix, hapus transisi ai pada card dan perbaiki bug ui yang terpotong atau over"
+
+Root Causes & Audit Findings:
+1. Card Artificial Stagger/Slide Transitions:
+   - While the vendored `useGeneratedGrid.ts` library had been previously removed, lingering `motion.article` and `motion.div` entrance effects (`initial={{ opacity: 0, y: 20 }}`, `delay: Math.min(...)`, `whileHover={{ scale: 1.03 }}`) remained across Home grid, Home rails, Search grid, Watchlist, MovieDetail (cast, similar, recommendations, sections), CompanyDetail, and PersonDetail. This produced an artificial staggered pop-in latency that felt like an "AI generated" transition.
+   - Rail cards also scaled the whole tile on hover (`whileHover={{ scale: 1.03 }}`), causing title text jitter and card bounds to bump against rail boundaries.
+2. UI Clipping & Overflow Bugs ("terpotong atau over"):
+   - In `src/index.css`: `.scroll-row__track` had `overflow-y: hidden` with `padding-block: 0`, clipping card focus rings, rating badges, and top/bottom edges when hovering over posters in horizontal rails.
+   - In `src/components/CardDetailPopup.tsx`: on short viewports or cards near the bottom edge of the screen, the popup's vertical clamp allowed it to extend below the viewport, clipping the "Open details" button.
+   - In `src/components/Navbar.tsx`: On mobile screens, `SearchPanel` was rendered with `absolute top-full w-full` directly inside a padded container (`px-4 sm:px-6`), extending 16px past the right edge and causing horizontal overflow.
+   - Search icon alignment in `Navbar.tsx` had an inconsistent `left-3.5` position against `pl-10`.
+
+Changes Applied:
+1. Card Transitions Removed Repo-Wide:
+   - `src/App.tsx`: Replaced `motion.article` entrance delay and outer scale on Home grid cards with clean `<article>` and inner poster `group-hover:scale-105`. Updated `HorizontalSection` rail cards from outer `motion.div` to clean `<div className="shrink-0 w-28 sm:w-32 md:w-36 cursor-pointer group">` with smooth image zoom.
+   - `src/pages/SearchPage.tsx`: Replaced `motion.article` with `<article className="group">` and smooth image hover scale.
+   - `src/pages/WatchlistPage.tsx`: Replaced `motion.article` entrance stagger with `<article className="group">`.
+   - `src/pages/MovieDetailPage.tsx`: Removed `motion.div` staggered delays from Cast, Similar Movies, Recommendations, and content section wrappers; cards now use clean `<div className="shrink-0 group">` with image zoom. Removed unused `motion/react` import.
+   - `src/pages/CompanyDetailPage.tsx`: Removed `motion.div` entrance stagger from company credit cards.
+   - `src/pages/PersonDetailPage.tsx`: Removed `motion.div` entrance animations from Header, Filmography, and individual credit cards; replaced with crisp, instant `div` elements. Removed unused `motion/react` import.
+   - `src/components/TrailerHover.tsx`: Removed remnant `data-t-generate-skip=""` and generation overlay comments.
+2. UI Clipping & Overflow Fixes:
+   - `src/index.css`: Added `padding-block: 6px; margin-block: -6px;` to `.scroll-row__track` so badges, shadows, and hover transforms have breathing room inside `overflow-y: hidden`.
+   - `src/components/CardDetailPopup.tsx`: Clamped popup top position with `Math.max(16, Math.min(top, window.innerHeight - panelH - 16))` and added `max-h-[calc(100vh-80px)] overflow-y-auto` to the panel interior, guaranteeing the "Open details" button is never clipped.
+   - `src/components/Navbar.tsx`: Standardized search icon to `left-3` (matching `pl-10`), and wrapped mobile `SearchField` and `SearchPanel` in a dedicated `<div className="relative w-full">` to prevent horizontal bleed.
+
+Verification & Runtime Proof:
+- [CLAIM] strict tsc bersih — [PROOF] `npx tsc --noEmit` exit code 0.
+- [CLAIM] build bersih — [PROOF] `npm run build` → 524 modules transformed, built in 7.01s, 0 errors.
+- [CLAIM] drag test suite hijau — [PROOF] `npm run test:drag` → 9/9 checks passed, 0 console errors.
+- [CLAIM] headless sweep bebas overflow di mobile (390x844) & desktop (1440x900) — [PROOF] Verified across `/`, `/category/trending`, `/search?q=batman`, `/watchlist`: `hasHorizontalOverflow: false`, `scrollWidth <= innerWidth`, 0 console errors.

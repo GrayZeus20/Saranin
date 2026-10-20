@@ -75,6 +75,8 @@ body {
      the first card still lines up with the page gutter). */
   gap: 12px;
   padding-inline: 4px;
+  padding-block: 6px;
+  margin-block: -6px;
   overflow-x: auto;
   overflow-y: hidden;
   /* A swipe that reaches the end of the rail must not turn into a browser
@@ -84,6 +86,12 @@ body {
   scroll-padding-inline: 4px;
   /* Images inside a rail must not start their own native drag. */
   -webkit-user-drag: none;
+}
+
+.scroll-row__track img {
+  -webkit-user-drag: none;
+  user-drag: none;
+  user-select: none;
 }
 
 /* Magnetic snapping is a touch affordance. On a fine pointer it fights the

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import { ImageWithFallback } from '../components/ImageWithFallback'
 import { TrailerHover } from '../components/TrailerHover'
@@ -85,9 +85,10 @@ export default function SearchPage() {
     // `type` is in the key because it changes the endpoint — a new pill is a new
     // request, not a client-side re-slice of a page asked for a different kind.
     queryKey: ['search', q, urlPage, locale, endpointKind],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const data = await fetchWithRateLimit<MultiSearchResponse>(
-        `/search/${endpointKind}?query=${encodeURIComponent(q)}&language=${locale}&include_adult=false&page=${urlPage}`
+        `/search/${endpointKind}?query=${encodeURIComponent(q)}&language=${locale}&include_adult=false&page=${urlPage}`,
+        { signal }
       )
       const items = endpointKind === 'multi'
         ? normalizeMulti(data.results || [])
@@ -96,8 +97,7 @@ export default function SearchPage() {
       return { items, totalPages, totalResults: data.total_results || 0 }
     },
     enabled: q.length > 0,
-    // No placeholderData: keeping the previous query's results painted stale
-    // titles (and a stale total) while the new query was still in flight.
+    placeholderData: keepPreviousData,
     retry: 2,
     retryDelay: 1000,
   })
@@ -106,6 +106,7 @@ export default function SearchPage() {
   const totalPages = searchQuery.data?.totalPages ?? 1
   const totalResults = searchQuery.data?.totalResults ?? 0
   const isFetching = searchQuery.isFetching
+  const isPlaceholderData = searchQuery.isPlaceholderData
 
   // Only the Anime pill still narrows client-side (search has no genre/language
   // params); every other pill's page is already the right kind.
@@ -240,7 +241,7 @@ export default function SearchPage() {
             {/* Result summary + type filter */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
               <p className="text-text-muted text-xs sm:text-sm">
-                {searchQuery.isLoading || isFetching ? 'Searching…' : totalResults > 0 ? (
+                {searchQuery.isLoading || (isFetching && !isPlaceholderData) ? 'Searching…' : totalResults > 0 ? (
                   <>
                     <span className="text-text-primary font-bold">{filtered.length}</span> shown of{' '}
                     <span className="text-text-primary font-bold">{totalResults}</span> for{' '}
@@ -274,9 +275,8 @@ export default function SearchPage() {
               </div>
             </div>
 
-            {/* Loading skeletons — a page-sized placeholder, shown for both a new
-                query and a new Type pill (each is its own request). */}
-            {(searchQuery.isLoading || isFetching) && (
+            {/* Loading skeletons — shown only on initial load or when no data is cached yet */}
+            {(searchQuery.isLoading || (isFetching && !isPlaceholderData)) && (
               <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5">
                 {Array.from({ length: 20 }).map((_, i) => (
                   <div key={i} className="flex flex-col gap-3">
@@ -303,30 +303,23 @@ export default function SearchPage() {
               </div>
             )}
 
-            {/* Results grid — rendered only once the query has settled, so a
-                still-loading search cannot flash "No results". */}
-            {!searchQuery.isLoading && !searchQuery.isError && !isFetching && (
+            {/* Results grid — smooth transition while background fetching */}
+            {!searchQuery.isLoading && !searchQuery.isError && !(isFetching && !isPlaceholderData) && filtered.length > 0 && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+                animate={{ opacity: isFetching ? 0.45 : 1 }}
                 transition={{ duration: 0.25, ease: 'easeInOut' }}
                 className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5"
               >
-                {filtered.map((m, i) => (
-                  <motion.article
+                {filtered.map((m) => (
+                  <article
                     key={`${m.media_type}-${m.id}`}
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: Math.min(0.04 + i * 0.02, 0.35), ease: [0.16, 1, 0.3, 1] }}
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.98 }}
                     onClick={() => openDetail(m)}
-                    className="cursor-pointer relative hover:z-40"
+                    className="cursor-pointer relative hover:z-40 group"
                   >
                     <CardDetailPopup movie={m} mediaType={m.media_type === 'tv' ? 'tv' : 'movie'}>
                       <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
-                        <ImageWithFallback src={tmdbImage(m.poster_path, 'poster', 'w342')} alt={m.title} kind="poster" className="w-full h-full object-cover" sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                        <ImageWithFallback src={tmdbImage(m.poster_path, 'poster', 'w342')} alt={m.title} kind="poster" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                         <TrailerHover mediaType={m.media_type === 'tv' ? 'tv' : 'movie'} id={m.id} title={m.title} />
                         <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
                           &#9733; {m.vote_average?.toFixed(1)}
@@ -345,7 +338,7 @@ export default function SearchPage() {
                     </CardDetailPopup>
                     {/* Caption outside the clipped poster box — survives zoom. */}
                     <div className="px-0.5 pt-2">
-                      <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5">{m.title}</p>
+                      <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5 group-hover:text-accent transition-colors">{m.title}</p>
                       <div className="flex items-center gap-1.5">
                         <span className="text-text-muted text-[9px] sm:text-[10px]">{formatDate(m.release_date)}</span>
                         {m.genre_ids?.[0] && GENRE_MAP[m.genre_ids[0]] && (
@@ -356,13 +349,13 @@ export default function SearchPage() {
                         )}
                       </div>
                     </div>
-                  </motion.article>
+                  </article>
                 ))}
               </motion.div>
             )}
 
-            {/* Empty state — same settled gate as the grid above */}
-            {!searchQuery.isLoading && !searchQuery.isError && !isFetching && filtered.length === 0 && (
+            {/* Empty state — gated on the fetch having fully settled */}
+            {!searchQuery.isLoading && !searchQuery.isError && !isFetching && !isPlaceholderData && filtered.length === 0 && (
               <div className="text-center py-16">
                 <p className="text-4xl mb-3">&#x1f50d;</p>
                 <p className="text-text-primary text-sm font-bold mb-2">
@@ -399,7 +392,7 @@ export default function SearchPage() {
             )}
 
             {/* Pagination — Prev / Next only, matches home */}
-            {!searchQuery.isLoading && !searchQuery.isError && totalResults > 0 && (
+            {!searchQuery.isLoading && !searchQuery.isError && totalResults > 0 && filtered.length > 0 && (
               <div className="flex items-center justify-center gap-4 py-8 pb-12">
                 <button
                   onClick={() => goToPage(urlPage - 1)}

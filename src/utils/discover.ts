@@ -16,6 +16,7 @@ import { DEFAULT_REGION } from './region'
 
 export const TMDB_MAX_PAGE = 500
 export const VOTE_COUNT_FLOOR = '200' // keeps vote_average.desc from surfacing 1-vote obscurities
+export const REGIONAL_VOTE_COUNT_FLOOR = '5' // realistic vote floor for regional/sinetron/dramas on TMDB
 export const ANIMATION_GENRE = '16' // the TV half of a combined grid strips anime
 /** One visible grid page. TMDB answers 20 per kind; a merged page is sliced to this. */
 export const GRID_PAGE_SIZE = 20
@@ -40,15 +41,6 @@ export interface DiscoverSort {
 
 /** Which /discover endpoints back the view: one kind, or both merged into one page. */
 export type DiscoverMedia = 'movie' | 'tv' | 'both'
-
-/** Runtime filter presets — minutes. Bands keep the UI to three pills. */
-export type RuntimeBand = 'short' | 'medium' | 'long'
-
-export function runtimeRange(band: RuntimeBand): { from: number | null; to: number | null } {
-  if (band === 'short') return { from: null, to: 90 }
-  if (band === 'medium') return { from: 90, to: 120 }
-  return { from: 120, to: null }
-}
 
 /**
  * Age-rating band, server-side via US certifications (TMDB's `adult` flag is
@@ -77,11 +69,6 @@ export interface DiscoverOptions {
   yearFrom?: number | null
   /** latest release/air year, inclusive */
   yearTo?: number | null
-  /** vote_average.gte — a floor, so 7 shows 7.0 and up */
-  ratingFloor?: number | null
-  /** with_runtime.gte / .lte in minutes */
-  runtimeFrom?: number | null
-  runtimeTo?: number | null
   /** default 'both' — one merged movie+tv page */
   media?: DiscoverMedia
   /** genre ids, OR'd together (TMDB reads `a|b` as OR) */
@@ -107,20 +94,41 @@ export interface DiscoverOptions {
    * A merged request then targets GRID_PAGE_SIZE grid tiles PLUS the hero, so the
    * grid is not left one short — the "says 20, shows 19" report.
    *
-   * KNOWN TMDB LIMIT: a single-kind /discover page holds at most 20 results, and
-   * there is no page-size parameter. A movie-only or tv-only hero page therefore
-   * yields 20 titles total (1 hero + 19 tiles); drawing the 21st from TMDB page 2
-   * would duplicate that item on view page 2. The caller's label reports the two
-   * numbers separately, so the count is never wrong — only the tile count differs.
+   * Single-kind views draw from a two-page TMDB window (see fetchDiscoverPage),
+   * so 20 grid tiles + 1 hero is reachable for movie-only and tv-only too.
    */
   heroSlot?: boolean
+  /** Optional signal for cancelling out-of-date queries */
+  signal?: AbortSignal
 }
 
-export function buildDiscoverParams(opts: DiscoverOptions): URLSearchParams {
+// Cross-media genre mapping between TMDB Movie genres and TV series genres:
+//   Movie 28 (Action) & 12 (Adventure) <-> TV 10759 (Action & Adventure)
+//   Movie 14 (Fantasy) & 878 (Sci-Fi)   <-> TV 10765 (Sci-Fi & Fantasy)
+//   Movie 10752 (War)                   <-> TV 10768 (War & Politics)
+function mapGenresForKind(genreIds: number[], kind?: 'movie' | 'tv'): number[] {
+  if (!kind) return genreIds
+  const result = new Set<number>()
+  for (const id of genreIds) {
+    result.add(id)
+    if (kind === 'tv') {
+      if (id === 28 || id === 12) result.add(10759)
+      if (id === 14 || id === 878) result.add(10765)
+      if (id === 10752) result.add(10768)
+    } else if (kind === 'movie') {
+      if (id === 10759) { result.add(28); result.add(12) }
+      if (id === 10765) { result.add(14); result.add(878) }
+      if (id === 10768) result.add(10752)
+    }
+  }
+  return [...result]
+}
+
+export function buildDiscoverParams(opts: DiscoverOptions, kind?: 'movie' | 'tv'): URLSearchParams {
   const params = new URLSearchParams({
     language: opts.language ?? 'en-US',
     page: String(opts.page),
-    sort_by: opts.sort.movie,
+    sort_by: kind ? opts.sort[kind] : opts.sort.movie,
   })
   // Provider + region only constrain the query when a provider was picked;
   // watch_region alone would silently narrow every discover request.
@@ -129,10 +137,10 @@ export function buildDiscoverParams(opts: DiscoverOptions): URLSearchParams {
     params.set('with_watch_providers', opts.providerIds.join('|'))
     params.set('with_watch_monetization_types', 'flatrate')
   }
-  if (opts.voteFloor) params.set('vote_count.gte', VOTE_COUNT_FLOOR)
-  if (opts.ratingFloor) params.set('vote_average.gte', String(opts.ratingFloor))
-  if (opts.runtimeFrom) params.set('with_runtime.gte', String(opts.runtimeFrom))
-  if (opts.runtimeTo) params.set('with_runtime.lte', String(opts.runtimeTo))
+  if (opts.voteFloor) {
+    const isRegional = (opts.originCountries || []).length > 0
+    params.set('vote_count.gte', isRegional ? REGIONAL_VOTE_COUNT_FLOOR : VOTE_COUNT_FLOOR)
+  }
   // Origin countries — the drama presets. Pipe = OR, so `KR|CN` accepts either.
   const countries = (opts.originCountries || []).filter(c => /^[A-Z]{2}$/.test(c))
   if (countries.length > 0) params.set('with_origin_country', countries.join('|'))
@@ -144,7 +152,8 @@ export function buildDiscoverParams(opts: DiscoverOptions): URLSearchParams {
   // Genres. A pipe (`a|b`) is OR, a comma (`a,b`) is AND — the two cannot be
   // mixed, so the anime case ANDs the animation genre onto the picked ones
   // ("anime in Drama"), while the plain case ORs them.
-  const genres = [...(opts.genreIds ?? [])].filter(n => Number.isFinite(n) && n > 0)
+  const rawGenres = [...(opts.genreIds ?? [])].filter(n => Number.isFinite(n) && n > 0)
+  const genres = mapGenresForKind(rawGenres, kind)
   if (opts.animeOnly) {
     if (!genres.includes(Number(ANIMATION_GENRE))) genres.unshift(Number(ANIMATION_GENRE))
     params.set('with_genres', genres.join(','))
@@ -160,11 +169,12 @@ export function buildDiscoverParams(opts: DiscoverOptions): URLSearchParams {
  * filters. `media: 'both'` merges a movie request and a tv request, dedupes them
  * and slices the result back to one full page.
  */
-export async function fetchDiscoverPage(opts: DiscoverOptions): Promise<CombinedPage> {
+export async function fetchDiscoverPage(opts: DiscoverOptions, signal?: AbortSignal): Promise<CombinedPage> {
   const media = opts.media ?? 'both'
+  const optSignal = signal ?? opts.signal
 
-  const build = (kind: 'movie' | 'tv') => {
-    const params = buildDiscoverParams(opts)
+  const build = (kind: 'movie' | 'tv', page: number) => {
+    const params = buildDiscoverParams({ ...opts, page }, kind)
     params.set('sort_by', opts.sort[kind])
     // The anime strip is a TV-half concern only — and animeOnly is the one mode
     // that must keep the animation genre.
@@ -191,9 +201,11 @@ export async function fetchDiscoverPage(opts: DiscoverOptions): Promise<Combined
 
   if (media === 'both') {
     const [movieData, tvData] = await Promise.all([
-      fetchWithRateLimit<TMDBListResponse>(build('movie')),
-      fetchWithRateLimit<TMDBListResponse>(build('tv')),
+      fetchWithRateLimit<TMDBListResponse>(build('movie', opts.page), { signal: optSignal }),
+      fetchWithRateLimit<TMDBListResponse>(build('tv', opts.page), { signal: optSignal }),
     ])
+    // Movie and TV live in separate id namespaces, so the two halves can never
+    // collide here — a merged page always yields ~40 candidates before slicing.
     const items = dedupById(
       (movieData.results || []).map(normalizeMovie),
       (tvData.results || []).map(normalizeTv),
@@ -201,12 +213,29 @@ export async function fetchDiscoverPage(opts: DiscoverOptions): Promise<Combined
     return { items, totalPages: clampPages(Math.max(movieData.total_pages || 1, tvData.total_pages || 1)) }
   }
 
-  const data = await fetchWithRateLimit<TMDBListResponse>(build(media))
-  // A single kind cannot exceed TMDB's 20-per-page here — see the heroSlot note.
-  const items = (data.results || [])
-    .map(media === 'tv' ? normalizeTv : normalizeMovie)
-    .slice(0, takeSize)
-  return { items, totalPages: clampPages(data.total_pages || 1) }
+  // --- Single-kind views: a two-page window per view page --------------------
+  // /discover returns at most 20 results per page and has no page-size param,
+  // so a movie-only (or tv-only) hero page used to ship 20 titles total — one
+  // became the hero and the grid rendered 19 ("kadang ga sampai 20"). Two TMDB
+  // pages per view page fixes it without duplicating rows across pages:
+  //   view page 1 → TMDB 1+2 · view page 2 → TMDB 3+4 · …
+  // Two requests per page — exactly what the merged branch already costs.
+  const firstTmdbPage = Math.min(TMDB_MAX_PAGE, (opts.page - 1) * 2 + 1)
+  const secondTmdbPage = Math.min(TMDB_MAX_PAGE, firstTmdbPage + 1)
+  const [data, nextData] = await Promise.all([
+    fetchWithRateLimit<TMDBListResponse>(build(media, firstTmdbPage), { signal: optSignal }),
+    secondTmdbPage > firstTmdbPage
+      ? fetchWithRateLimit<TMDBListResponse>(build(media, secondTmdbPage), { signal: optSignal })
+      : Promise.resolve<TMDBListResponse>({ results: [] }),
+  ])
+  const normalize = media === 'tv' ? normalizeTv : normalizeMovie
+  const items = dedupById(
+    (data.results || []).map(normalize),
+    (nextData.results || []).map(normalize),
+  ).slice(0, takeSize)
+  // View pages are half as many as TMDB pages — round up so a partial tail page
+  // is still reachable.
+  return { items, totalPages: clampPages(Math.ceil((data.total_pages || 1) / 2)) }
 }
 
 /**
@@ -226,11 +255,11 @@ export async function fetchCuratedPage(
   tvEndpoint: string,
   page: number,
   language: string,
-  opts?: { heroSlot?: boolean },
+  opts?: { heroSlot?: boolean; signal?: AbortSignal },
 ): Promise<CombinedPage> {
   const [movieData, tvData] = await Promise.all([
-    fetchWithRateLimit<TMDBListResponse>(`${movieEndpoint}?language=${language}&page=${page}`),
-    fetchWithRateLimit<TMDBListResponse>(`${tvEndpoint}?language=${language}&page=${page}`),
+    fetchWithRateLimit<TMDBListResponse>(`${movieEndpoint}?language=${language}&page=${page}`, { signal: opts?.signal }),
+    fetchWithRateLimit<TMDBListResponse>(`${tvEndpoint}?language=${language}&page=${page}`, { signal: opts?.signal }),
   ])
   const takeSize = opts?.heroSlot ? GRID_PAGE_SIZE + 1 : GRID_PAGE_SIZE
   const items = dedupById(
