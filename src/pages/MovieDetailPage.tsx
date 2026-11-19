@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import Navbar from '../components/Navbar'
 import ScrollRow from '../components/ScrollRow'
 import { ImageWithFallback } from '../components/ImageWithFallback'
@@ -137,8 +138,6 @@ export default function MovieDetailPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const isTv = location.pathname.startsWith('/tv/')
-  const [detail, setDetail] = useState<MovieDetail | null>(null)
-  const [loading, setLoading] = useState(true)
   // The YouTube iframe is only mounted after a tap: an autoloaded embed pulls
   // the whole player on a phone connection before anyone asked for it.
   const [trailerPlaying, setTrailerPlaying] = useState(false)
@@ -146,87 +145,76 @@ export default function MovieDetailPage() {
   const [showAvailabilityList, setShowAvailabilityList] = useState(false)
   const { region } = useRegion()
   const { locale } = useLocale()
-  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const detailQuery = useQuery<MovieDetail>({
+    queryKey: ['detail', isTv ? 'tv' : 'movie', id, locale],
+    enabled: !!id,
+    queryFn: async ({ signal }) => {
+      const endpoint = isTv ? 'tv' : 'movie'
+      // `watch/providers` must be part of append_to_response — the two
+      // "Available in …" sections read `detail['watch/providers']`.
+      const data = await fetchWithRateLimit<any>(
+        `/${endpoint}/${id}?append_to_response=credits,videos,similar,recommendations,watch%2Fproviders,${isTv ? 'content_ratings' : 'release_dates'}&language=${locale}`,
+        { signal }
+      )
+      const relabel = (item: any) => ({
+        ...item,
+        title: item.name || item.title,
+        release_date: item.first_air_date || item.release_date,
+      })
+      const normalized: MovieDetail = isTv ? {
+        ...data,
+        title: data.name || data.title,
+        release_date: data.first_air_date || data.release_date,
+        runtime: data.episode_run_time?.[0] || null,
+        similar: data.similar ? { ...data.similar, results: (data.similar.results || []).map(relabel) } : data.similar,
+        recommendations: data.recommendations
+          ? { ...data.recommendations, results: (data.recommendations.results || []).map(relabel) }
+          : data.recommendations,
+      } : data
+
+      // Alternative titles — the source of the romanized ("latin") title for
+      // Korean/Chinese/Japanese originals. A failure here must never take the
+      // page down; the line just does not render.
+      try {
+        const alt = await fetchWithRateLimit<any>(
+          `/${endpoint}/${id}/alternative_titles?language=${locale}`,
+          { signal }
+        )
+        normalized.alternative_titles = isTv ? (alt?.results || []) : (alt?.titles || [])
+      } catch {
+        normalized.alternative_titles = []
+      }
+      return normalized
+    },
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+  })
+
+  const detail = detailQuery.data ?? null
+  const loading = detailQuery.isLoading
 
   // Title is set once the payload resolves; the hook ignores the empty string.
   useDocumentTitle(detail ? `${detail.title} — SARANIN.` : '')
 
+  // Reset transient UI state & scroll to top whenever the viewed title changes.
   useEffect(() => {
-    if (!id) return
-    setLoading(true)
     setTrailerPlaying(false)
-    // A title swap must not leave the previous title's country list open.
     setShowAvailabilityList(false)
-    const controller = new AbortController()
-    const endpoint = isTv ? 'tv' : 'movie'
-    // `watch/providers` must be part of append_to_response — the two
-    // "Available in …" sections read `detail['watch/providers']`, and without
-    // this the key never existed, so both sections were dead on every title.
-    // `recommendations` rides along for the "More Like This" rail.
-    fetchWithRateLimit<any>(
-      `/${endpoint}/${id}?append_to_response=credits,videos,similar,recommendations,watch%2Fproviders,${isTv ? 'content_ratings' : 'release_dates'}&language=${locale}`,
-      { signal: controller.signal }
-    )
-      .then(async data => {
-        // TV payloads name their fields differently (`name`, `first_air_date`)
-        // not just at the top level but inside every nested result list too.
-        // Only the top-level object used to be normalized, so the rails built
-        // from `similar` / `recommendations` handed `undefined` to every
-        // `m.title` — which crashed the whole page on TV titles.
-        const relabel = (item: any) => ({
-          ...item,
-          title: item.name || item.title,
-          release_date: item.first_air_date || item.release_date,
-        })
-        const normalized = isTv ? {
-          ...data,
-          title: data.name || data.title,
-          release_date: data.first_air_date || data.release_date,
-          runtime: data.episode_run_time?.[0] || null,
-          similar: data.similar ? { ...data.similar, results: (data.similar.results || []).map(relabel) } : data.similar,
-          recommendations: data.recommendations
-            ? { ...data.recommendations, results: (data.recommendations.results || []).map(relabel) }
-            : data.recommendations,
-        } : data
-        // Alternative titles — the source of the romanized ("latin") title for
-        // Korean/Chinese/Japanese originals. A failure here must never take the
-        // page down; the line just does not render.
-        try {
-          const alt = await fetchWithRateLimit<any>(
-            `/${endpoint}/${id}/alternative_titles?language=${locale}`,
-            { signal: controller.signal }
-          )
-          normalized.alternative_titles = isTv ? (alt?.results || []) : (alt?.titles || [])
-        } catch {
-          normalized.alternative_titles = []
-        }
-        setDetail(normalized)
-        setLoading(false)
-      })
-      .catch(() => { if (!controller.signal.aborted) { setDetail(null); setLoading(false) } })
-    return () => controller.abort()
-  }, [id, isTv, locale])
-
-  useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
-  }, [])
-
-  // Clicking a similar title swaps the payload under the same mounted shell; the
-  // inner scroller kept its old offset, dropping the user mid-page on the new
-  // title. Reset it whenever the title changes (after the loaded tree mounts).
-  useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }) }, [id, loading])
+    window.scrollTo({ top: 0 })
+  }, [id, isTv])
 
   if (loading) {
     return (
-      <div className="fixed inset-0 z-50 bg-surface">
-        <div className="w-full h-full overflow-y-auto">
-          <div className="relative h-[40vh] sm:h-[50vh] md:h-[60vh]">
+      <div className="min-h-[100dvh] flex flex-col bg-surface">
+        <Navbar />
+        <div className="flex-1">
+          <div className="relative h-[36vh] sm:h-[48vh] md:h-[58vh]">
             <div className="skeleton absolute inset-0" />
           </div>
-          <div className="relative z-10 -mt-32 sm:-mt-40 max-w-5xl mx-auto px-4 sm:px-6 md:px-8 pb-16">
+          <div className="relative z-10 -mt-24 sm:-mt-32 md:-mt-40 max-w-5xl mx-auto px-4 sm:px-6 md:px-8 pb-16">
             <div className="flex flex-col sm:flex-row gap-5 sm:gap-8 mb-8">
-              <div className="shrink-0 w-36 sm:w-44 md:w-52">
+              <div className="shrink-0 w-36 sm:w-44 md:w-52 mx-auto sm:mx-0">
                 <div className="skeleton w-full aspect-[2/3] rounded-xl" />
               </div>
               <div className="flex-1 space-y-4">
@@ -243,20 +231,40 @@ export default function MovieDetailPage() {
             </div>
           </div>
         </div>
+        <Footer />
       </div>
     )
   }
 
   if (!detail) {
     return (
-      <div className="fixed inset-0 z-50 bg-surface flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-5xl mb-4">{isTv ? '📺' : '🎬'}</p>
-          <p className="text-text-primary text-lg font-semibold mb-2">{isTv ? 'TV Show' : 'Movie'} not found</p>
-          <Link to="/" className="mt-4 inline-block bg-accent text-black text-sm font-bold px-6 py-2.5 rounded-full active:scale-95 transition-transform">
-            Go Home
-          </Link>
+      <div className="min-h-[100dvh] flex flex-col bg-surface">
+        <Navbar />
+        <div className="flex-1 flex items-center justify-center px-6 py-24">
+          <div className="text-center max-w-sm">
+            <p className="text-5xl mb-4">{isTv ? '📺' : '🎬'}</p>
+            <p className="text-text-primary text-lg font-semibold mb-2">{isTv ? 'TV Show' : 'Movie'} not found</p>
+            <p className="text-text-muted text-sm mb-6">
+              {(detailQuery.error as Error)?.message || 'This title could not be loaded.'}
+            </p>
+            <div className="flex items-center justify-center gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={() => detailQuery.refetch()}
+                className="bg-accent text-black text-sm font-bold px-6 py-2.5 rounded-full active:scale-95 transition-transform"
+              >
+                Try Again
+              </button>
+              <Link
+                to="/"
+                className="text-text-muted text-sm font-bold px-6 py-2.5 rounded-full border border-zinc-800 hover:border-accent hover:text-text-primary transition-all active:scale-95"
+              >
+                Go Home
+              </Link>
+            </div>
+          </div>
         </div>
+        <Footer />
       </div>
     )
   }
@@ -345,12 +353,11 @@ export default function MovieDetailPage() {
     .slice(0, 20)
 
   return (
-    <div className="fixed inset-0 z-50 bg-surface">
-      <div ref={scrollRef} className="w-full h-full overflow-y-auto">
-        <Navbar />
-
+    <div className="min-h-[100dvh] flex flex-col bg-surface">
+      <Navbar />
+      <main className="flex-1">
         {/* Backdrop Hero */}
-        <div className="relative h-[40vh] sm:h-[50vh] md:h-[60vh]">
+        <div className="relative h-[36vh] sm:h-[48vh] md:h-[58vh]">
           {movie.backdrop_path ? (
             <>
               <ImageWithFallback
@@ -366,14 +373,14 @@ export default function MovieDetailPage() {
               <TrailerHover mediaType={isTv ? 'tv' : 'movie'} id={movie.id} title={movie.title} zoomClass="scale-[1.18]" />
             </>
           ) : (
-            <div className="w-full h-full bg-surface-card flex items-center justify-center text-zinc-700 text-4xl font-black">{movie.title}</div>
+            <div className="w-full h-full bg-surface-card flex items-center justify-center text-zinc-700 text-2xl sm:text-4xl font-black px-6 text-center">{movie.title}</div>
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/50 to-transparent" />
           <div className="absolute inset-0 bg-gradient-to-r from-surface/60 to-transparent" />
         </div>
 
         {/* Content */}
-        <div className="relative z-10 -mt-32 sm:-mt-40 max-w-5xl mx-auto px-4 sm:px-6 md:px-8 pb-16">
+        <div className="relative z-10 -mt-24 sm:-mt-32 md:-mt-40 max-w-5xl mx-auto px-4 sm:px-6 md:px-8 pb-12">
           {/* Title Row */}
           <div className="flex flex-col sm:flex-row gap-5 sm:gap-8 mb-8">
             <div className="relative shrink-0 w-36 sm:w-44 md:w-52 mx-auto sm:mx-0">
@@ -435,7 +442,7 @@ export default function MovieDetailPage() {
                 {director && <><span className="text-zinc-700">•</span><span>Dir. {director}</span></>}
               </div>
               <div className="flex flex-wrap gap-1.5 mb-5">
-                {(detail.genres || movie.genre_ids.map(gid => ({ id: gid, name: GENRE_MAP[gid] }))).map(g => (
+                {(detail.genres || movie.genre_ids?.map(gid => ({ id: gid, name: GENRE_MAP[gid] })) || []).filter(g => g.name).map(g => (
                   <span key={g.id} className="text-[10px] font-bold uppercase tracking-wider bg-accent/10 text-accent border border-accent/20 px-2.5 py-1 rounded-md">{g.name}</span>
                 ))}
               </div>
@@ -489,7 +496,7 @@ export default function MovieDetailPage() {
               <div className="relative aspect-video w-full rounded-xl overflow-hidden border border-zinc-800 bg-black">
                 {trailerPlaying ? (
                   <iframe
-                    src={`https://www.youtube.com/embed/${trailer.key}?autoplay=1`}
+                    src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(trailer.key)}?autoplay=1&rel=0`}
                     title={`${movie.title} trailer`}
                     className="absolute inset-0 w-full h-full"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -652,15 +659,12 @@ export default function MovieDetailPage() {
                     <div
                       role="link"
                       tabIndex={0}
-                      onClick={() => {
-                        navigate(`/${isTv ? 'tv' : 'movie'}/${m.id}`)
-                        scrollRef.current?.scrollTo({ top: 0 })
-                      }}
+                      onClick={() => navigate(`/${isTv ? 'tv' : 'movie'}/${m.id}`)}
                       onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget) return
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault()
                           navigate(`/${isTv ? 'tv' : 'movie'}/${m.id}`)
-                          scrollRef.current?.scrollTo({ top: 0 })
                         }
                       }}
                       className="block w-28 sm:w-32 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
@@ -706,15 +710,12 @@ export default function MovieDetailPage() {
                     <div
                       role="link"
                       tabIndex={0}
-                      onClick={() => {
-                        navigate(`/${isTv ? 'tv' : 'movie'}/${m.id}`)
-                        scrollRef.current?.scrollTo({ top: 0 })
-                      }}
+                      onClick={() => navigate(`/${isTv ? 'tv' : 'movie'}/${m.id}`)}
                       onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget) return
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault()
                           navigate(`/${isTv ? 'tv' : 'movie'}/${m.id}`)
-                          scrollRef.current?.scrollTo({ top: 0 })
                         }
                       }}
                       className="block w-28 sm:w-32 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
@@ -747,9 +748,8 @@ export default function MovieDetailPage() {
             </div>
           )}
         </div>
-
-        <Footer />
-      </div>
+      </main>
+      <Footer />
     </div>
   )
 }

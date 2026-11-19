@@ -471,6 +471,7 @@ export default function Navbar() {
     if (mobileSearchOpen) {
       closeSearchField()
     } else {
+      setMenuOpen(false)
       setMobileSearchOpen(true)
     }
   }, [mobileSearchOpen, closeSearchField])
@@ -766,7 +767,10 @@ export default function Navbar() {
             </div>
             <button
               className="md:hidden text-text-primary p-2 active:scale-90 transition-transform"
-              onClick={() => setMenuOpen(!menuOpen)}
+              onClick={() => {
+                if (!menuOpen) closeSearchField()
+                setMenuOpen(!menuOpen)
+              }}
               aria-label={menuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={menuOpen}
             >

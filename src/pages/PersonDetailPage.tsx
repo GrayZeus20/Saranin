@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import { ImageWithFallback } from '../components/ImageWithFallback'
@@ -23,6 +24,7 @@ interface PersonDetail {
 
 interface CastCredit {
   id: number
+  credit_id?: string
   title: string
   character: string
   poster_path: string | null
@@ -34,6 +36,7 @@ interface CastCredit {
 
 interface CrewCredit {
   id: number
+  credit_id?: string
   title: string
   job: string
   department: string
@@ -95,13 +98,38 @@ function getAge(birthday: string, deathday?: string | null): number {
 
 export default function PersonDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const [person, setPerson] = useState<PersonDetail | null>(null)
-  const [credits, setCredits] = useState<PersonCombinedCredits | null>(null)
-  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'cast' | 'crew'>('cast')
   const [visibleCount, setVisibleCount] = useState(FILMOGRAPHY_PAGE)
-  const scrollRef = useRef<HTMLDivElement>(null)
   const { locale } = useLocale()
+
+  const personQuery = useQuery<{ person: PersonDetail; credits: PersonCombinedCredits }>({
+    queryKey: ['person', id, locale],
+    enabled: !!id,
+    queryFn: async ({ signal }) => {
+      const [personData, creditsData] = await Promise.all([
+        fetchWithRateLimit<PersonDetail>(`/person/${id}?language=${locale}`, { signal }),
+        fetchWithRateLimit<CreditsResponse>(`/person/${id}/combined_credits?language=${locale}`, { signal }),
+      ])
+      const normalize = (arr: any[]) => arr.map(c => ({
+        ...c,
+        title: c.title || c.name || '',
+        release_date: c.release_date || c.first_air_date || '',
+      }))
+      return {
+        person: personData,
+        credits: {
+          cast: normalize(creditsData.cast || []),
+          crew: normalize(creditsData.crew || []),
+        },
+      }
+    },
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+  })
+
+  const person = personQuery.data?.person ?? null
+  const credits = personQuery.data?.credits ?? null
+  const loading = personQuery.isLoading
 
   useDocumentTitle(person ? `${person.name} — SARANIN.` : '')
 
@@ -112,51 +140,29 @@ export default function PersonDetailPage() {
   }
 
   useEffect(() => {
-    window.scrollTo(0, 0)
-  }, [])
+    setVisibleCount(FILMOGRAPHY_PAGE)
+    window.scrollTo({ top: 0 })
+  }, [id])
 
+  const sortedCast = useMemo(
+    () => credits?.cast
+      ?.filter(c => c.title)
+      .sort((a, b) => (b.release_date || '').localeCompare(a.release_date || '')) || [],
+    [credits],
+  )
+
+  const sortedCrew = useMemo(
+    () => credits?.crew
+      ?.filter(c => c.title)
+      .sort((a, b) => (b.release_date || '').localeCompare(a.release_date || '')) || [],
+    [credits],
+  )
+
+  // Auto-select crew tab for directors/writers/composers with no acting credits
   useEffect(() => {
-    if (!id) return
-    setLoading(true)
-    const controller = new AbortController()
-    Promise.all([
-      fetchWithRateLimit<PersonDetail>(`/person/${id}?language=${locale}`, { signal: controller.signal }),
-      fetchWithRateLimit<CreditsResponse>(`/person/${id}/combined_credits?language=${locale}`, { signal: controller.signal }),
-    ]).then(([personData, creditsData]) => {
-      // Normalize TV credits: name→title, first_air_date→release_date
-      const normalize = (arr: any[]) => arr.map(c => ({
-        ...c,
-        title: c.title || c.name || '',
-        release_date: c.release_date || c.first_air_date || '',
-      }))
-      setPerson(personData)
-      setCredits({
-        cast: normalize(creditsData.cast || []),
-        crew: normalize(creditsData.crew || []),
-      })
-      setLoading(false)
-    }).catch(() => {
-      if (!controller.signal.aborted) {
-        setPerson(null)
-        setCredits(null)
-        setLoading(false)
-      }
-    })
-    return () => controller.abort()
-  }, [id, locale])
-
-  useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
-  }, [])
-
-  const sortedCast = credits?.cast
-    ?.filter(c => c.title)
-    .sort((a, b) => (b.release_date || '').localeCompare(a.release_date || '')) || []
-
-  const sortedCrew = credits?.crew
-    ?.filter(c => c.title)
-    .sort((a, b) => (b.release_date || '').localeCompare(a.release_date || '')) || []
+    if (!credits) return
+    setActiveTab(sortedCast.length === 0 && sortedCrew.length > 0 ? 'crew' : 'cast')
+  }, [id, credits, sortedCast.length, sortedCrew.length])
 
   // Slice the active list for the current reveal window.
   const activeCredits = activeTab === 'cast' ? sortedCast : sortedCrew
@@ -165,43 +171,60 @@ export default function PersonDetailPage() {
 
   if (loading) {
     return (
-      <div className="fixed inset-0 z-50 bg-surface">
-        <div className="w-full h-full overflow-y-auto">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 py-12">
-            <div className="flex flex-col sm:flex-row gap-8">
-              <div className="skeleton w-48 h-64 rounded-xl shrink-0" />
-              <div className="flex-1 space-y-4">
-                <div className="skeleton h-10 w-3/4 rounded" />
-                <div className="skeleton h-4 w-1/2 rounded" />
-                <div className="skeleton h-24 w-full rounded" />
-              </div>
+      <div className="min-h-[100dvh] flex flex-col bg-surface">
+        <Navbar />
+        <div className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 md:px-8 pt-6 md:pt-10 pb-12">
+          <div className="flex flex-col sm:flex-row gap-6 sm:gap-8">
+            <div className="skeleton w-40 sm:w-48 h-60 sm:h-64 rounded-xl shrink-0 mx-auto sm:mx-0" />
+            <div className="flex-1 space-y-4">
+              <div className="skeleton h-10 w-3/4 rounded" />
+              <div className="skeleton h-4 w-1/2 rounded" />
+              <div className="skeleton h-24 w-full rounded" />
             </div>
           </div>
         </div>
+        <Footer />
       </div>
     )
   }
 
   if (!person) {
     return (
-      <div className="fixed inset-0 z-50 bg-surface flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-5xl mb-4">👤</p>
-          <p className="text-text-primary text-lg font-semibold mb-2">Person not found</p>
-          <Link to="/" className="mt-4 inline-block bg-accent text-black text-sm font-bold px-6 py-2.5 rounded-full active:scale-95 transition-transform">
-            Go Home
-          </Link>
+      <div className="min-h-[100dvh] flex flex-col bg-surface">
+        <Navbar />
+        <div className="flex-1 flex items-center justify-center px-6 py-24">
+          <div className="text-center max-w-sm">
+            <p className="text-5xl mb-4">👤</p>
+            <p className="text-text-primary text-lg font-semibold mb-2">Person not found</p>
+            <p className="text-text-muted text-sm mb-6">
+              {(personQuery.error as Error)?.message || 'This profile could not be loaded.'}
+            </p>
+            <div className="flex items-center justify-center gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={() => personQuery.refetch()}
+                className="bg-accent text-black text-sm font-bold px-6 py-2.5 rounded-full active:scale-95 transition-transform"
+              >
+                Try Again
+              </button>
+              <Link
+                to="/"
+                className="text-text-muted text-sm font-bold px-6 py-2.5 rounded-full border border-zinc-800 hover:border-accent hover:text-text-primary transition-all active:scale-95"
+              >
+                Go Home
+              </Link>
+            </div>
+          </div>
         </div>
+        <Footer />
       </div>
     )
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-surface">
-      <div ref={scrollRef} className="w-full h-full overflow-y-auto">
-        <Navbar />
-
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 py-12">
+    <div className="min-h-[100dvh] flex flex-col bg-surface">
+      <Navbar />
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 md:px-8 pt-6 md:pt-10 pb-12">
           {/* Header */}
           <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 mb-10">
             {/* Photo */}
@@ -291,11 +314,11 @@ export default function PersonDetailPage() {
             {/* Cast and crew credits render through one card — the two lists
                 only differ in their subtitle line. */}
             <div className="space-y-3">
-              {visibleCredits.map(credit => (
+              {visibleCredits.map((credit, idx) => (
                 <div
-                  // movie and tv ids are separate TMDB namespaces, so the bare
-                  // id is not unique across a combined-credits list.
-                  key={`${credit.media_type}-${credit.id}-${activeTab === 'cast' ? (credit as CastCredit).character : (credit as CrewCredit).job}`}
+                  // movie and tv ids are separate TMDB namespaces, and a person can
+                  // hold multiple credits on the same title; credit_id is unique per credit.
+                  key={credit.credit_id || `${credit.media_type}-${credit.id}-${activeTab}-${idx}`}
                 >
                   <Link
                     to={`/${credit.media_type || 'movie'}/${credit.id}`}
@@ -345,9 +368,8 @@ export default function PersonDetailPage() {
               </button>
             )}
           </div>
-        </div>
-        <Footer />
-      </div>
+      </main>
+      <Footer />
     </div>
   )
 }

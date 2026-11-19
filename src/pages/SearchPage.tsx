@@ -2,16 +2,11 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { motion } from 'motion/react'
-import { ImageWithFallback } from '../components/ImageWithFallback'
-import { TrailerHover } from '../components/TrailerHover'
-import { CardDetailPopup } from '../components/CardDetailPopup'
+import { MovieCard } from '../components/MovieCard'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
-import { WatchButton } from '../components/WatchButton'
 import { fetchWithRateLimit } from '../utils/api'
-import { tmdbImage } from '../utils/imageSizes'
-import { formatDate, GENRE_MAP } from '../utils/constants'
-import { normalizeMovie, normalizeTv, type Movie } from '../utils/tmdb'
+import { isAnime, normalizeMovie, normalizeTv, type Movie } from '../utils/tmdb'
 import { useLocale } from '../utils/locale'
 import { useSearchHistory } from '../utils/searchHistory'
 import { useDocumentTitle } from '../utils/useDocumentTitle'
@@ -27,10 +22,6 @@ interface MultiSearchResponse {
 const TMDB_MAX_PAGE = 500
 
 const TRENDING_SEARCHES = ['One Piece', 'Demon Slayer', 'Naruto', 'Dragon Ball', 'Jujutsu Kaisen', 'Attack on Titan', 'Dune', 'Oppenheimer']
-
-function isAnime(m: Movie): boolean {
-  return !!m.genre_ids?.includes(16) && m.original_language === 'ja'
-}
 
 // Multi search returns people + collections; the grid only wants movie/tv.
 function normalizeMulti(results: any[]): Movie[] {
@@ -58,9 +49,10 @@ export default function SearchPage() {
 
   const q = searchParams.get('q')?.trim() || ''
   const urlPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)
+  const rawType = searchParams.get('type')
+  const type: SearchType = rawType === 'movie' || rawType === 'tv' || rawType === 'anime' ? rawType : 'all'
 
   const [input, setInput] = useState(q)
-  const [type, setType] = useState<SearchType>('all')
   const inputRef = useRef<HTMLInputElement>(null)
   const { locale } = useLocale()
   const { items: recentSearches, add: addRecentSearch, remove: removeRecentSearch, clear: clearRecentSearches } = useSearchHistory()
@@ -118,38 +110,49 @@ export default function SearchPage() {
   const submit = useCallback((value: string) => {
     const trimmed = value.trim()
     if (!trimmed) return
-    setSearchParams({ q: trimmed, page: '1' })
-  }, [setSearchParams])
-
-  // A Type pill switches the endpoint, so a page number counted for the previous
-  // kind cannot carry over — page 3 of a 2000-result movie search is very often
-  // page 1 of the tv search. Reset to the first page on every pill change.
-  const selectType = useCallback((next: SearchType) => {
-    setType(next)
     setSearchParams(prev => {
       const params = new URLSearchParams(prev)
+      params.set('q', trimmed)
       params.set('page', '1')
       return params
     })
   }, [setSearchParams])
 
+  // A Type pill switches the endpoint, so a page number counted for the previous
+  // kind cannot carry over — page 3 of a 2000-result movie search is very often
+  // page 1 of the tv search. Reset to the first page on every pill change, and
+  // keep `type` in the URL so Back from a detail page preserves the active tab.
+  const selectType = useCallback((next: SearchType) => {
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev)
+      if (next === 'all') params.delete('type')
+      else params.set('type', next)
+      params.set('page', '1')
+      return params
+    }, { replace: true })
+  }, [setSearchParams])
+
   const goToPage = useCallback((next: number) => {
-    setSearchParams({ q, page: String(Math.max(1, Math.min(totalPages, next))) })
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev)
+      params.set('q', q)
+      params.set('page', String(Math.max(1, Math.min(totalPages, next))))
+      return params
+    })
   }, [q, totalPages, setSearchParams])
 
   const openDetail = (m: Movie) => navigate(`/${m.media_type === 'tv' ? 'tv' : 'movie'}/${m.id}`)
   const hasQuery = q.length > 0
 
   return (
-    <div className="min-h-[100dvh] bg-surface">
-      <div className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 md:px-12 py-5 md:py-8">
-        <Navbar />
-
+    <div className="min-h-[100dvh] flex flex-col bg-surface">
+      <Navbar />
+      <div className="relative z-10 flex-1 w-full max-w-[1400px] mx-auto px-4 sm:px-6 md:px-12 pt-6 md:pt-8 pb-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-4 mb-8"
+          className="mb-8"
         >
           <h1 className="text-2xl sm:text-3xl font-black text-text-primary mb-5">Search</h1>
 
@@ -277,7 +280,7 @@ export default function SearchPage() {
 
             {/* Loading skeletons — shown only on initial load or when no data is cached yet */}
             {(searchQuery.isLoading || (isFetching && !isPlaceholderData)) && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5">
                 {Array.from({ length: 20 }).map((_, i) => (
                   <div key={i} className="flex flex-col gap-3">
                     <div className="skeleton w-full aspect-[2/3] rounded-xl" />
@@ -308,48 +311,10 @@ export default function SearchPage() {
               <motion.div
                 animate={{ opacity: isFetching ? 0.45 : 1 }}
                 transition={{ duration: 0.25, ease: 'easeInOut' }}
-                className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5"
+                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5"
               >
                 {filtered.map((m) => (
-                  <article
-                    key={`${m.media_type}-${m.id}`}
-                    onClick={() => openDetail(m)}
-                    className="cursor-pointer relative hover:z-40 group"
-                  >
-                    <CardDetailPopup movie={m} mediaType={m.media_type === 'tv' ? 'tv' : 'movie'}>
-                      <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
-                        <ImageWithFallback src={tmdbImage(m.poster_path, 'poster', 'w342')} alt={m.title} kind="poster" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                        <TrailerHover mediaType={m.media_type === 'tv' ? 'tv' : 'movie'} id={m.id} title={m.title} />
-                        <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
-                          &#9733; {m.vote_average?.toFixed(1)}
-                        </div>
-                        {m.media_type === 'tv' && (
-                          <div className="absolute top-2 left-2 bg-accent text-black text-[9px] font-bold px-1.5 py-0.5 rounded-md">TV</div>
-                        )}
-                        {isAnime(m) && (
-                          <div className={`${m.media_type === 'tv' ? 'top-[26px]' : 'top-2'} absolute left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md`}>Anime</div>
-                        )}
-                        <WatchButton
-                          compact
-                          entry={{ id: m.id, media_type: m.media_type === 'tv' ? 'tv' : 'movie', title: m.title, poster_path: m.poster_path, vote_average: m.vote_average, release_date: m.release_date }}
-                        />
-                      </div>
-                    </CardDetailPopup>
-                    {/* Caption outside the clipped poster box — survives zoom. */}
-                    <div className="px-0.5 pt-2">
-                      <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5 group-hover:text-accent transition-colors">{m.title}</p>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-text-muted text-[9px] sm:text-[10px]">{formatDate(m.release_date)}</span>
-                        {m.genre_ids?.[0] && GENRE_MAP[m.genre_ids[0]] && (
-                          <>
-                            <span className="text-text-muted/40 text-[9px]">•</span>
-                            <span className="text-text-muted text-[9px] sm:text-[10px]">{GENRE_MAP[m.genre_ids[0]]}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </article>
+                  <MovieCard key={`${m.media_type}-${m.id}`} movie={m} onOpen={openDetail} />
                 ))}
               </motion.div>
             )}
@@ -382,7 +347,7 @@ export default function SearchPage() {
                     </button>
                   )}
                   <button
-                    onClick={() => { setInput(''); setType('all'); setSearchParams({}) }}
+                    onClick={() => { setInput(''); setSearchParams({}) }}
                     className="text-xs font-medium px-4 py-2 rounded-full bg-accent text-black hover:bg-accent/90 transition-all"
                   >
                     New Search

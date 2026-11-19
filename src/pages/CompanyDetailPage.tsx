@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
@@ -71,108 +72,107 @@ async function fetchCompanyCredits(id: string, signal: AbortSignal, language: st
 
 export default function CompanyDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const [company, setCompany] = useState<CompanyDetail | null>(null)
-  const [movies, setMovies] = useState<MediaCredit[]>([])
-  const [tvShows, setTvShows] = useState<MediaCredit[]>([])
-  const [loading, setLoading] = useState(true)
-  const [creditsError, setCreditsError] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
   const { locale } = useLocale()
+
+  const companyQuery = useQuery<CompanyDetail>({
+    queryKey: ['company', id, locale],
+    enabled: !!id,
+    queryFn: ({ signal }) =>
+      fetchWithRateLimit<CompanyDetail>(`/company/${id}?language=${locale}`, { signal }),
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+  })
+
+  const creditsQuery = useQuery<{ movies: MediaCredit[]; tvShows: MediaCredit[] }>({
+    queryKey: ['company-credits', id, locale],
+    enabled: !!id && !!companyQuery.data,
+    queryFn: async ({ signal }) => {
+      const { movies: mv, tvShows: tv } = await fetchCompanyCredits(id!, signal, locale)
+      const dedupe = (list: MediaCredit[]) => [...new Map(list.map(item => [`${item.media_type}-${item.id}`, item])).values()]
+      return { movies: dedupe(mv), tvShows: dedupe(tv) }
+    },
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+  })
+
+  const company = companyQuery.data ?? null
+  const movies = creditsQuery.data?.movies ?? []
+  const tvShows = creditsQuery.data?.tvShows ?? []
+  const loading = companyQuery.isLoading
+  const creditsError = creditsQuery.isError
 
   useDocumentTitle(company ? `${company.name} — SARANIN.` : '')
 
   useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
-  }, [])
-
-  useEffect(() => {
-    if (!id) return
-    setLoading(true)
-    setCreditsError(false)
-
-    const controller = new AbortController()
-    const load = async () => {
-      try {
-        const companyData = await fetchWithRateLimit<CompanyDetail>(`/company/${id}?language=${locale}`, { signal: controller.signal })
-        if (controller.signal.aborted) return
-        setCompany(companyData)
-
-        // Company header already resolves — credits are secondary, so a credit
-        // failure degrades to an inline notice instead of hiding the whole page.
-        try {
-          const { movies: mv, tvShows: tv } = await fetchCompanyCredits(id, controller.signal, locale)
-          if (controller.signal.aborted) return
-          setMovies(mv)
-          setTvShows(tv)
-        } catch (err) {
-          if (!controller.signal.aborted) {
-            console.error('[company] credits failed', err)
-            setCreditsError(true)
-          }
-        }
-      } catch (err) {
-        if (!controller.signal.aborted) {
-          console.error('[company] detail failed', err)
-          setCompany(null)
-        }
-      } finally {
-        if (!controller.signal.aborted) setLoading(false)
-      }
-    }
-
-    load()
-    return () => controller.abort()
-  }, [id, locale])
+    window.scrollTo({ top: 0 })
+  }, [id])
 
   if (loading) {
     return (
-      <div className="fixed inset-0 z-50 bg-surface">
-        <div className="w-full h-full overflow-y-auto">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
-            <div className="flex flex-col md:flex-row gap-8 mb-12">
-              <div className="skeleton w-40 h-40 rounded-2xl shrink-0 mx-auto md:mx-0" />
-              <div className="flex-1 space-y-4">
-                <div className="skeleton h-10 w-2/3 rounded" />
-                <div className="skeleton h-4 w-1/3 rounded" />
-                <div className="skeleton h-20 w-full rounded" />
-              </div>
-            </div>
-            <div className="skeleton h-8 w-48 rounded mb-6" />
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {Array.from({ length: 10 }).map((_, i) => (
-                <div key={i} className="flex flex-col gap-3">
-                  <div className="skeleton w-full aspect-[2/3] rounded-xl" />
-                  <div className="skeleton h-4 w-3/4 rounded" />
-                </div>
-              ))}
+      <div className="min-h-[100dvh] flex flex-col bg-surface">
+        <Navbar />
+        <div className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 pt-6 md:pt-10 pb-12">
+          <div className="flex flex-col md:flex-row gap-6 md:gap-8 mb-12">
+            <div className="skeleton w-32 sm:w-40 h-32 sm:h-40 rounded-2xl shrink-0 mx-auto md:mx-0" />
+            <div className="flex-1 space-y-4">
+              <div className="skeleton h-10 w-2/3 rounded" />
+              <div className="skeleton h-4 w-1/3 rounded" />
+              <div className="skeleton h-20 w-full rounded" />
             </div>
           </div>
+          <div className="skeleton h-8 w-48 rounded mb-6" />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="flex flex-col gap-3">
+                <div className="skeleton w-full aspect-[2/3] rounded-xl" />
+                <div className="skeleton h-4 w-3/4 rounded" />
+              </div>
+            ))}
+          </div>
         </div>
+        <Footer />
       </div>
     )
   }
 
   if (!company) {
     return (
-      <div className="fixed inset-0 z-50 bg-surface flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-5xl mb-4">🏢</p>
-          <p className="text-text-primary text-lg font-semibold mb-2">Company not found</p>
-          <Link to="/" className="mt-4 inline-block bg-accent text-black text-sm font-bold px-6 py-2.5 rounded-full">
-            Go Home
-          </Link>
+      <div className="min-h-[100dvh] flex flex-col bg-surface">
+        <Navbar />
+        <div className="flex-1 flex items-center justify-center px-6 py-24">
+          <div className="text-center max-w-sm">
+            <p className="text-5xl mb-4">🏢</p>
+            <p className="text-text-primary text-lg font-semibold mb-2">Company not found</p>
+            <p className="text-text-muted text-sm mb-6">
+              {(companyQuery.error as Error)?.message || 'This studio could not be loaded.'}
+            </p>
+            <div className="flex items-center justify-center gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={() => companyQuery.refetch()}
+                className="bg-accent text-black text-sm font-bold px-6 py-2.5 rounded-full active:scale-95 transition-transform"
+              >
+                Try Again
+              </button>
+              <Link
+                to="/"
+                className="text-text-muted text-sm font-bold px-6 py-2.5 rounded-full border border-zinc-800 hover:border-accent hover:text-text-primary transition-all active:scale-95"
+              >
+                Go Home
+              </Link>
+            </div>
+          </div>
         </div>
+        <Footer />
       </div>
     )
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-surface">
-      <div ref={scrollRef} className="w-full h-full overflow-y-auto">
-        <Navbar />
+    <div className="min-h-[100dvh] flex flex-col bg-surface">
+      <Navbar />
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 pt-6 md:pt-10 pb-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -219,7 +219,7 @@ export default function CompanyDetailPage() {
               <p className="text-text-muted italic mb-6">No description available for {company.name}.</p>
             )}
 
-            {company.homepage && (
+            {company.homepage && /^https?:\/\//i.test(company.homepage) && (
               <a href={company.homepage} target="_blank" rel="noopener noreferrer" className="inline-block bg-accent/10 text-accent hover:bg-accent hover:text-black transition-colors font-bold text-sm px-5 py-2 rounded-full">
                 Visit Website
               </a>
@@ -234,7 +234,7 @@ export default function CompanyDetailPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5">
           {[...movies, ...tvShows].map((item) => (
             <div
               key={`${item.media_type}-${item.id}`}
@@ -252,30 +252,49 @@ export default function CompanyDetailPage() {
                     sizes="(min-width: 1024px) 20vw, (min-width: 768px) 25vw, (min-width: 640px) 33vw, 50vw"
                   />
                   <TrailerHover mediaType={item.media_type} id={item.id} title={item.title} />
-                  <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
+                  <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded-md">
                     ★ {item.vote_average?.toFixed(1)}
                   </div>
                   {item.media_type === 'tv' && (
                     <div className="absolute top-2 left-2 bg-accent text-black text-[9px] font-bold px-1.5 py-0.5 rounded-md">TV</div>
                   )}
                 </div>
-                <h3 className="mt-3 text-text-primary text-sm font-bold line-clamp-1 group-hover:text-accent transition-colors">{item.title}</h3>
-                <p className="text-text-muted text-[10px]">{item.release_date?.split('-')[0] || item.first_air_date?.split('-')[0]}</p>
+                <h3 className="mt-2 text-text-primary text-xs sm:text-sm font-semibold line-clamp-1 group-hover:text-accent transition-colors">{item.title}</h3>
+                <p className="text-text-muted text-[11px] tabular-nums">{item.release_date?.split('-')[0] || item.first_air_date?.split('-')[0]}</p>
               </Link>
             </div>
           ))}
         </div>
 
-        {creditsError && (
-          <p className="text-text-muted text-center py-8 text-sm">Couldn't load every production list for this company. Refresh to try again.</p>
+        {creditsQuery.isLoading && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="flex flex-col gap-3">
+                <div className="skeleton w-full aspect-[2/3] rounded-xl" />
+                <div className="skeleton h-4 w-3/4 rounded" />
+              </div>
+            ))}
+          </div>
         )}
 
-        {!creditsError && movies.length === 0 && tvShows.length === 0 && (
+        {creditsError && (
+          <div className="text-center py-8">
+            <p className="text-text-muted text-sm mb-3">Couldn't load production list for this company.</p>
+            <button
+              type="button"
+              onClick={() => creditsQuery.refetch()}
+              className="text-xs font-bold text-accent hover:text-white transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!creditsQuery.isLoading && !creditsError && movies.length === 0 && tvShows.length === 0 && (
           <p className="text-text-muted text-center py-20 italic">No productions found for this company.</p>
         )}
-      </div>
+      </main>
       <Footer />
-      </div>
     </div>
   )
 }

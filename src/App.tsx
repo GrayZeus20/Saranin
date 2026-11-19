@@ -1,19 +1,20 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, Link, useSearchParams, useNavigationType } from 'react-router-dom'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
-import { motion, AnimatePresence } from 'motion/react'
+import { motion } from 'motion/react'
 import { toast } from 'sonner'
 import { ImageWithFallback } from './components/ImageWithFallback'
 import { TrailerHover } from './components/TrailerHover'
-import { CardDetailPopup } from './components/CardDetailPopup'
-import Navbar, { RegionSelect } from './components/Navbar'
+import { MovieCard } from './components/MovieCard'
+import { CatalogFilterPanel, DRAMA_PRESETS, mediaOf, type ContentType, type DramaKey } from './components/CatalogFilterPanel'
+import Navbar from './components/Navbar'
 import ScrollRow from './components/ScrollRow'
 import { WatchButton } from './components/WatchButton'
 import Footer from './components/Footer'
-import { DiscoverFilterSections, type DiscoverFilterValue } from './components/DiscoverFilterSections'
+import { type DiscoverFilterValue } from './components/DiscoverFilterSections'
 import { fetchWithRateLimit, TMDB_TOKEN } from './utils/api'
 import { tmdbImage } from './utils/imageSizes'
-import { formatDate, GENRE_MAP } from './utils/constants'
+import { GENRE_MAP } from './utils/constants'
 import { normalizeMovie, normalizeTv, type Movie } from './utils/tmdb'
 import { getRegionProviders } from './utils/providers'
 import { useRegion } from './utils/region'
@@ -22,7 +23,7 @@ import { useWatchlist } from './utils/watchlist'
 import { useDocumentTitle } from './utils/useDocumentTitle'
 import {
   fetchDiscoverPage, fetchCuratedPage, GRID_PAGE_SIZE,
-  type TMDBListResponse, type DiscoverSort, type DiscoverMedia, type AgeBand,
+  type TMDBListResponse, type DiscoverSort, type AgeBand,
 } from './utils/discover'
 
 // Environment validation
@@ -31,24 +32,6 @@ if (!TMDB_TOKEN) {
 }
 
 type CategoryKey = 'now_playing' | 'trending' | 'popular' | 'top_rated'
-type ContentType = 'all' | 'movie' | 'tv' | 'anime'
-/**
- * Drama presets. Each is a server-side /discover shape — the ORIGIN COUNTRY
- * defines the view (`with_origin_country`); it is not a client-side filter.
- * The user's genre pills still combine on top (with_genres), so "Drakor" +
- * Romance narrows the same query rather than starting a second one:
- *   sinetron → Indonesian series
- *   drakor   → Korean series
- *   dracin   → Chinese series
- * A preset implies TV (`selectDrama` writes type=tv), and the anime strip
- * still applies (`excludeAnime`), so donghua does not leak into Dracin.
- */
-type DramaKey = 'sinetron' | 'drakor' | 'dracin'
-const DRAMA_PRESETS: Record<DramaKey, { label: string; countries: string[] }> = {
-  sinetron: { label: 'Sinetron', countries: ['ID'] },
-  drakor: { label: 'Drakor', countries: ['KR'] },
-  dracin: { label: 'Dracin', countries: ['CN'] },
-}
 
 const CATEGORY_ENDPOINTS: Record<CategoryKey, { label: string; movie: string; tv: string }> = {
   now_playing: { label: 'Now Playing', movie: '/movie/now_playing', tv: '/tv/on_the_air' },
@@ -57,23 +40,17 @@ const CATEGORY_ENDPOINTS: Record<CategoryKey, { label: string; movie: string; tv
   top_rated: { label: 'Top Rated', movie: '/movie/top_rated', tv: '/tv/top_rated' },
 }
 
+const CATEGORY_OPTIONS = (Object.keys(CATEGORY_ENDPOINTS) as CategoryKey[]).map(key => ({
+  key,
+  label: CATEGORY_ENDPOINTS[key].label,
+}))
+
 // Discover sort per category (see utils/discover for the per-kind field rule).
 const CATEGORY_SORT: Record<CategoryKey, DiscoverSort> = {
   now_playing: { movie: 'primary_release_date.desc', tv: 'first_air_date.desc' },
   trending: { movie: 'popularity.desc', tv: 'popularity.desc' },
   popular: { movie: 'popularity.desc', tv: 'popularity.desc' },
   top_rated: { movie: 'vote_average.desc', tv: 'vote_average.desc' },
-}
-
-function isAnime(m: Movie): boolean {
-  return !!m.genre_ids?.includes(16) && m.original_language === 'ja'
-}
-
-// The Type pill maps onto /discover shape, not a client-side filter — same rule
-// as CategoryPage. 'tv' strips anime server-side; 'anime' is genre 16 + ja.
-function mediaOf(type: ContentType): DiscoverMedia {
-  if (type === 'movie' || type === 'tv') return type
-  return 'both'
 }
 
 function SkeletonCard() {
@@ -113,13 +90,13 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink,
 
   return (
     <div className="mb-10 md:mb-14">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-baseline gap-3">
-          <h2 className="text-lg sm:text-xl font-bold text-text-primary">{title}</h2>
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 min-w-0">
+          <h2 className="text-lg sm:text-xl font-bold text-text-primary truncate max-w-full">{title}</h2>
           <p className="text-text-muted text-xs">{subtitle}</p>
         </div>
         {viewAllLink && (
-          <Link to={viewAllLink} className="inline-flex items-center gap-1.5 text-sm text-accent hover:text-white font-medium transition-colors">
+          <Link to={viewAllLink} className="shrink-0 inline-flex items-center gap-1.5 text-sm text-accent hover:text-white font-medium transition-colors">
             See all
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/></svg>
           </Link>
@@ -151,7 +128,21 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink,
           {movies.map(m => (
             // movie and tv ids are separate TMDB namespaces and coexist in one
             // rail, so the bare id is not a unique key here.
-            <div key={`${title}-${m.media_type ?? 'movie'}-${m.id}`} onClick={() => onMovieClick(m)} className="shrink-0 w-28 sm:w-32 md:w-36 cursor-pointer group">
+            <div
+              key={`${title}-${m.media_type ?? 'movie'}-${m.id}`}
+              role="link"
+              tabIndex={0}
+              aria-label={`${m.title}${m.release_date ? ` (${m.release_date.slice(0, 4)})` : ''}`}
+              onClick={() => onMovieClick(m)}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onMovieClick(m)
+                }
+              }}
+              className="shrink-0 w-28 sm:w-32 md:w-36 cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
+            >
               <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
                 <ImageWithFallback
                   src={tmdbImage(m.poster_path, 'poster', 'w342')}
@@ -163,7 +154,7 @@ function HorizontalSection({ title, subtitle, movies, onMovieClick, viewAllLink,
                 {/* Card chrome (gradient) first, then the preview — the
                     preview layer carries its own pause + title chrome, which
                     must paint ABOVE the gradient, not under it. */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <TrailerHover mediaType={m.media_type === 'tv' ? 'tv' : 'movie'} id={m.id} title={m.title} />
                 <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-accent text-[9px] font-mono font-bold px-1.5 py-0.5 rounded">
                   &#9733; {m.vote_average?.toFixed(1)}
@@ -507,11 +498,23 @@ export default function App() {
 
   const setContentTypeFilter = useCallback((type: ContentType) => {
     // 'all' is the default view, so it drops the param rather than writing it.
+    // Picking any standard type clears any active drama preset so they never collide.
     updateParams({
       type: type === 'all' ? null : type,
+      drama: null,
       page: null,
     })
   }, [updateParams])
+
+  // Region changes invalidate the provider id — a provider picked in one region
+  // may not exist in the newly selected region's catalog. Ref-guarded so mount
+  // does not wipe a deep-linked provider.
+  const prevRegionRef = useRef(region)
+  useEffect(() => {
+    if (prevRegionRef.current === region) return
+    prevRegionRef.current = region
+    updateParams({ provider: null, page: null })
+  }, [region, updateParams])
 
   // Drama presets are single-select — picking one drops the others. A preset
   // implies TV, so the Type pill switches to 'tv' to stay truthful in the UI.
@@ -545,8 +548,8 @@ export default function App() {
   }, [updateParams])
 
   // 'all' is the default view, not a filter — counting it showed a badge of 1 on
-  // a pristine home. Deviation from the default is what counts.
-  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'all' ? 1 : 0) + discoverFilterCount + (activeDrama !== null ? 1 : 0)
+  // a pristine home. Drama presets imply type=tv, so type + drama count as one.
+  const activeFilterCount = activeGenres.length + (activePlatform !== null ? 1 : 0) + (contentType !== 'all' || activeDrama !== null ? 1 : 0) + discoverFilterCount
   // `activeFilterCount` drives the badge; the Reset control must also appear when
   // only the category moved, since resetFilters clears that too.
   const hasActiveFilters = activeFilterCount > 0 || activeCategory !== 'now_playing'
@@ -564,9 +567,9 @@ export default function App() {
 
   if (pageQuery.isError && !pageQuery.data) {
     return (
-      <div className="min-h-[100dvh] bg-surface">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 md:px-12 py-5 md:py-8">
-          <Navbar />
+      <div className="min-h-[100dvh] flex flex-col bg-surface">
+        <Navbar />
+        <div className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-6 md:px-12 pt-6 md:pt-8 pb-8">
           <div className="flex items-center justify-center py-24 px-6">
             <div className="text-center max-w-sm">
               <p className="text-5xl mb-4">&#x1f3ac;</p>
@@ -605,7 +608,7 @@ export default function App() {
   // mounted; only the grid below swaps to skeletons (see the grid block).
 
   return (
-    <div className="min-h-[100dvh] bg-surface">
+    <div className="min-h-[100dvh] flex flex-col bg-surface">
       {/* Ambient backdrop behind the hero — page 1 only. Previously a
           radial-gradient() whose color stops were url(...) values, which is invalid
           CSS and painted nothing; this is a real image layer with a CSS fade mask. */}
@@ -625,9 +628,10 @@ export default function App() {
         </div>
       ) : null}
 
-      <div className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 md:px-12 py-5 md:py-8">
-        {/* Navigation */}
-        <Navbar />
+      {/* Navigation */}
+      <Navbar />
+
+      <div className="relative z-10 flex-1 w-full max-w-[1400px] mx-auto px-4 sm:px-6 md:px-12 pt-5 md:pt-8 pb-8">
 
         {/* Hero / Featured Movie — page 1 only */}
         {featured && (
@@ -799,176 +803,27 @@ export default function App() {
           </div>
 
           {/* Filter pills - collapsible */}
-          <AnimatePresence>
-            {showGenres && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
-                className="overflow-hidden"
-              >
-                {/* Category Section */}
-                <div className="mt-4 pb-4 border-b border-zinc-800/50">
-                  <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Category</p>
-                  <div className="flex flex-wrap gap-2">
-                    {(Object.keys(CATEGORY_ENDPOINTS) as CategoryKey[]).map(key => (
-                      <button
-                        key={key}
-                        onClick={() => toggleCategory(key)}
-                        className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                          activeCategory === key
-                            ? 'bg-accent text-black'
-                            : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
-                        }`}
-                      >
-                        {CATEGORY_ENDPOINTS[key].label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Genre Section */}
-                <div className="mt-4 pb-4 border-b border-zinc-800/50">
-                  <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Genre</p>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => updateParams({ genres: null, page: null })}
-                      className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                        activeGenres.length === 0
-                          ? 'bg-accent text-black'
-                          : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
-                      }`}
-                    >
-                      All
-                    </button>
-                    {availableGenres.map(g => (
-                      <button
-                        key={g.id}
-                        onClick={() => toggleGenre(g.id)}
-                        className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                          activeGenres.includes(g.id)
-                            ? 'bg-accent text-black'
-                            : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
-                        }`}
-                      >
-                        {g.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Year / rating / runtime — server-side via /discover */}
-                <DiscoverFilterSections value={discoverFilterValue} onChange={setDiscoverFilters} />
-
-                {/* Platform Section — server-side filter against the region catalog.
-                    The region control sits in this header: the provider list is
-                    region-scoped, so which catalog is being filtered has to be
-                    visible right where the pills are, on every breakpoint. */}
-                <div className="mt-4 pb-4 border-b border-zinc-800/50">
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <div className="flex items-baseline gap-2">
-                      <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold">Platform</p>
-                      {activePlatform !== null && (
-                        <span className="text-accent text-[10px] font-bold">filtering</span>
-                      )}
-                    </div>
-                    <RegionSelect compact />
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => selectPlatform(null)}
-                      className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                        activePlatform === null
-                          ? 'bg-accent text-black'
-                          : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
-                      }`}
-                    >
-                      All
-                    </button>
-                    {platformOptions.map(p => (
-                      <button
-                        key={p.provider_id}
-                        onClick={() => selectPlatform(p.provider_id)}
-                        className={`shrink-0 flex items-center gap-1.5 min-h-[44px] text-xs font-medium px-3 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                          activePlatform === p.provider_id
-                            ? 'bg-accent text-black'
-                            : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
-                        }`}
-                      >
-                        {p.logo_path && (
-                          <span className="relative w-4 h-4 shrink-0">
-                            <ImageWithFallback
-                              src={tmdbImage(p.logo_path, 'logo', 'w45')}
-                              alt={p.provider_name}
-                              kind="logo"
-                              fallbackText={null}
-                              className="w-full h-full rounded-sm object-cover"
-                            />
-                          </span>
-                        )}
-                        {p.provider_name}
-                      </button>
-                    ))}
-                  </div>
-                  {platformOptions.length === 0 && (
-                    providersError ? (
-                      <p className="text-text-muted text-[10px] mt-2">
-                        Couldn't load platforms.{' '}
-                        <button type="button" onClick={() => refetchProviders()} className="text-accent font-bold hover:text-white transition-colors">
-                          Retry
-                        </button>
-                      </p>
-                    ) : (
-                      <p className="text-text-muted text-[10px] mt-2">Loading platforms…</p>
-                    )
-                  )}
-                </div>
-
-                {/* Content Type Section — drama presets live here as type
-                    pills, not a separate section: each one is a type view
-                    (TV + origin country) and belongs next to the others. */}
-                <div className="mt-4 pb-4 border-b border-zinc-800/50">
-                  <p className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Type</p>
-                  <div className="flex flex-wrap gap-2">
-                    {([
-                      { key: 'all', label: 'All' },
-                      { key: 'movie', label: 'Movies' },
-                      { key: 'tv', label: 'TV Series' },
-                      { key: 'anime', label: 'Anime' },
-                    ] as { key: ContentType; label: string }[]).map(t => (
-                      <button
-                        key={t.key}
-                        onClick={() => setContentTypeFilter(t.key)}
-                        className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                          contentType === t.key && activeDrama === null
-                            ? 'bg-accent text-black'
-                            : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                    {/* Drama presets — server-side origin-country views, each
-                        one its own /discover query shape. Single-select. */}
-                    {(Object.entries(DRAMA_PRESETS) as [DramaKey, { label: string }][]).map(([key, meta]) => (
-                      <button
-                        key={key}
-                        onClick={() => selectDrama(activeDrama === key ? null : key)}
-                        className={`shrink-0 inline-flex items-center justify-center min-h-[44px] text-xs font-medium px-4 py-2 rounded-full transition-all duration-200 active:scale-95 ${
-                          activeDrama === key
-                            ? 'bg-accent text-black'
-                            : 'bg-surface-elevated text-text-muted border border-zinc-800 hover:border-zinc-600'
-                        }`}
-                      >
-                        {meta.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <CatalogFilterPanel
+            open={showGenres}
+            categories={CATEGORY_OPTIONS}
+            activeCategory={activeCategory}
+            onSelectCategory={(key) => toggleCategory(key as CategoryKey)}
+            availableGenres={availableGenres}
+            activeGenres={activeGenres}
+            onClearGenres={() => updateParams({ genres: null, page: null })}
+            onToggleGenre={toggleGenre}
+            discoverFilterValue={discoverFilterValue}
+            onChangeDiscoverFilters={setDiscoverFilters}
+            platformOptions={platformOptions}
+            activePlatform={activePlatform}
+            providersError={providersError}
+            onSelectPlatform={selectPlatform}
+            onRetryProviders={() => refetchProviders()}
+            contentType={contentType}
+            activeDrama={activeDrama}
+            onSelectContentType={setContentTypeFilter}
+            onSelectDrama={selectDrama}
+          />
         </motion.div>
 
         {/* Movie Grid — one full page per view. A filter change is a new query
@@ -979,84 +834,19 @@ export default function App() {
           transition={{ duration: 0.25, ease: 'easeInOut' }}
         >
           {isPageLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-8">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-8">
               {Array.from({ length: GRID_PAGE_SIZE }).map((_, i) => <SkeletonCard key={`grid-skeleton-${i}`} />)}
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-8">
-            {gridMovies.map((movie) => (
-              <article
-                key={`${activeCategory}-${movie.media_type ?? 'movie'}-${movie.id}`}
-                onClick={() => openDetail(movie)}
-                className="cursor-pointer relative hover:z-40 group"
-              >
-                <CardDetailPopup movie={movie} mediaType={movie.media_type === 'tv' ? 'tv' : 'movie'}>
-                <div className="relative overflow-hidden rounded-xl bg-surface-card aspect-[2/3]">
-                  {movie.poster_path ? (
-                    <>
-                      <ImageWithFallback
-                        src={tmdbImage(movie.poster_path, 'poster', 'w342')}
-                        alt={movie.title}
-                        kind="poster"
-                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        sizes="(min-width: 1280px) 20vw, (min-width: 640px) 25vw, 50vw"
-                      />
-                      {/* Gradient first, preview above it — the preview's pause
-                          + title chrome must not be dimmed by this overlay. */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                      <TrailerHover mediaType={movie.media_type === 'tv' ? 'tv' : 'movie'} id={movie.id} title={movie.title} />
-                    </>
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-zinc-700 text-sm font-bold">{movie.title?.charAt(0)}</div>
-                  )}
-                  {/* Details indicator on hover */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <span className="bg-white text-black text-[10px] font-bold px-4 py-1.5 rounded-full shadow-lg">
-                      Details
-                    </span>
-                  </div>
-                  {/* Rating badge */}
-                  <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-accent text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md">
-                    &#9733; {movie.vote_average?.toFixed(1)}
-                  </div>
-                  {/* TV badge — every other grid marks mixed tv/movie lists;
-                      the anime badge below stacks under it for tv entries. */}
-                  {movie.media_type === 'tv' && (
-                    <div className="absolute top-2 left-2 bg-accent text-black text-[9px] font-bold px-1.5 py-0.5 rounded-md">TV</div>
-                  )}
-                  {/* Anime badge */}
-                  {isAnime(movie) && (
-                    <div className={`${movie.media_type === 'tv' ? 'top-[26px]' : 'top-2'} absolute left-2 bg-pink-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md`}>Anime</div>
-                  )}
-                  {/* Watchlist save — same control as the rails and detail page */}
-                  <WatchButton
-                    compact
-                    entry={{ id: movie.id, media_type: movie.media_type === 'tv' ? 'tv' : 'movie', title: movie.title, poster_path: movie.poster_path, vote_average: movie.vote_average, release_date: movie.release_date }}
-                  />
-                  {/* Bottom info — NOT clipped by the poster box: the caption
-                      lives outside the aspect box, so card zoom (scale on the
-                      article) can never crop it. This is the fix for the
-                      "judul tertutup saat di-zoom" report: the caption used to
-                      sit INSIDE the overflow-hidden poster box. */}
-                </div>
-                </CardDetailPopup>
-                {/* Caption outside the overflow-hidden box — visible at every
-                    zoom level, and it grows the card instead of being cropped. */}
-                <div className="px-0.5 pt-2">
-                  <p className="text-white font-bold text-[11px] sm:text-xs line-clamp-1 mb-0.5 group-hover:text-accent transition-colors">{movie.title}</p>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-text-muted text-[9px] sm:text-[10px]">{formatDate(movie.release_date)}</span>
-                    {movie.genre_ids?.[0] && GENRE_MAP[movie.genre_ids[0]] && (
-                      <>
-                        <span className="text-text-muted/40 text-[9px]">•</span>
-                        <span className="text-text-muted text-[9px] sm:text-[10px]">{GENRE_MAP[movie.genre_ids[0]]}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-8">
+              {gridMovies.map((movie) => (
+                <MovieCard
+                  key={`${activeCategory}-${movie.media_type ?? 'movie'}-${movie.id}`}
+                  movie={movie}
+                  onOpen={openDetail}
+                />
+              ))}
+            </div>
           )}
         </motion.div>
 

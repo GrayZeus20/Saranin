@@ -1,7 +1,9 @@
 // /watchlist — everything the user saved for later, newest first.
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
+import { toast } from 'sonner'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import { ImageWithFallback } from '../components/ImageWithFallback'
@@ -12,18 +14,18 @@ import { useDocumentTitle } from '../utils/useDocumentTitle'
 
 export default function WatchlistPage() {
   const { items, remove, clear } = useWatchlist()
+  const [confirmClear, setConfirmClear] = useState(false)
   useDocumentTitle(`Watchlist (${items.length}) — SARANIN.`)
 
   return (
-    <div className="min-h-[100dvh] bg-surface">
-      <div className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 md:px-12 py-5 md:py-8">
-        <Navbar />
-
+    <div className="min-h-[100dvh] flex flex-col bg-surface">
+      <Navbar />
+      <div className="relative z-10 flex-1 w-full max-w-[1400px] mx-auto px-4 sm:px-6 md:px-12 pt-6 md:pt-8 pb-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-4 mb-8 flex flex-wrap items-center justify-between gap-4"
+          className="mb-8 flex flex-wrap items-center justify-between gap-4"
         >
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-text-primary">Watchlist</h1>
@@ -34,13 +36,36 @@ export default function WatchlistPage() {
             </p>
           </div>
           {items.length > 0 && (
-            <button
-              type="button"
-              onClick={() => { if (window.confirm('Clear the whole watchlist?')) clear() }}
-              className="min-h-[44px] text-xs font-bold px-5 rounded-full bg-surface-elevated border border-zinc-800 text-text-muted hover:border-red-500 hover:text-red-400 transition-all active:scale-95"
-            >
-              Clear all
-            </button>
+            confirmClear ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmClear(false)}
+                  className="min-h-[44px] text-xs font-bold px-4 rounded-full bg-surface-elevated border border-zinc-800 text-text-muted hover:text-text-primary transition-all active:scale-95"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clear()
+                    setConfirmClear(false)
+                    toast('Watchlist cleared')
+                  }}
+                  className="min-h-[44px] text-xs font-bold px-5 rounded-full bg-red-600 text-white hover:bg-red-500 transition-all active:scale-95"
+                >
+                  Confirm clear
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmClear(true)}
+                className="min-h-[44px] text-xs font-bold px-5 rounded-full bg-surface-elevated border border-zinc-800 text-text-muted hover:border-red-500 hover:text-red-400 transition-all active:scale-95"
+              >
+                Clear all
+              </button>
+            )
           )}
         </motion.div>
 
@@ -59,7 +84,7 @@ export default function WatchlistPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-12">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5 pb-12">
             {items.map((entry) => (
               <article
                 key={`${entry.media_type}-${entry.id}`}

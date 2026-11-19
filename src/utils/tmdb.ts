@@ -58,3 +58,7 @@ export function dedupById(prev: Movie[], next: Movie[]): Movie[] {
 export function mediaPath(m: Pick<Movie, 'media_type' | 'id'>): string {
   return `/${m.media_type === 'tv' ? 'tv' : 'movie'}/${m.id}`
 }
+
+export function isAnime(m: Pick<Movie, 'genre_ids' | 'original_language'>): boolean {
+  return !!m.genre_ids?.includes(16) && m.original_language === 'ja'
+}

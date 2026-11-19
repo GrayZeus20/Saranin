@@ -17,16 +17,45 @@ export function AvailabilityModal({ open, regions, title, onClose }: {
   title: string
   onClose: () => void
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
 
-  // Escape closes; focus moves into the dialog when it opens so the keyboard
-  // path does not stay behind on the page underneath.
+  // Escape closes, Tab is trapped inside the dialog, body scroll is locked
+  // while open, and focus returns to the trigger element on close.
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
+    const previousFocus = document.activeElement as HTMLElement | null
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     closeRef.current?.focus()
-    return () => document.removeEventListener('keydown', onKey)
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key !== 'Tab' || !dialogRef.current) return
+      const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+      )
+      if (focusables.length === 0) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+      previousFocus?.focus?.()
+    }
   }, [open, onClose])
 
   return (
@@ -41,6 +70,7 @@ export function AvailabilityModal({ open, regions, title, onClose }: {
           onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
         >
           <motion.div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-label={`Where ${title} is available`}
