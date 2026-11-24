@@ -6,6 +6,7 @@ import { MotionConfig } from 'motion/react'
 import { Toaster } from 'sonner'
 import ErrorBoundary from './components/ErrorBoundary'
 import App from './App'
+import { HttpError } from './utils/api'
 import { startPwaUpdates } from './utils/pwaUpdate'
 import './index.css'
 
@@ -33,7 +34,12 @@ if (import.meta.env.PROD) {
 
   const warmOfflineChunks = () => {
     if (!navigator.serviceWorker.controller) return
-    import('./pages/WatchlistPage').catch(() => {
+    // Warm both Watchlist and MovieDetail so saved & previously-visited titles
+    // render offline instead of dying on an uncached lazy JS chunk.
+    Promise.allSettled([
+      import('./pages/WatchlistPage'),
+      import('./pages/MovieDetailPage'),
+    ]).catch(() => {
       // A failed warm must never affect the running page — the next online visit retries.
     })
   }
@@ -65,10 +71,20 @@ function PageLoader() {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      // offlineFirst lets queries fire even when navigator.onLine is false so
+      // the Service Worker's API_CACHE can answer immediately instead of
+      // React Query pausing every query in an infinite skeleton state.
+      networkMode: 'offlineFirst',
       staleTime: 5 * 60 * 1000,
-      gcTime: 10 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
       refetchOnWindowFocus: false,
-      retry: 1,
+      retry: (failureCount, error) => {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) return false
+        if (error instanceof HttpError && (error.isOffline || (error.status >= 400 && error.status < 500 && error.status !== 429))) {
+          return false
+        }
+        return failureCount < 1
+      },
       retryDelay: 500,
     },
   },

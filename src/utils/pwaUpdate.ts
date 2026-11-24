@@ -37,16 +37,21 @@ function runningEntryAsset(): string | null {
 
 /** The entry script the currently deployed build references. */
 async function deployedEntryAsset(): Promise<string | null> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return null
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 5000)
   try {
     // no-store: the point is to bypass every cache between here and the origin.
-    const res = await fetch(MANIFEST_URL, { cache: 'no-store' })
+    const res = await fetch(MANIFEST_URL, { cache: 'no-store', signal: controller.signal })
     if (!res.ok) return null
     const html = await res.text()
     const match = html.match(/\/assets\/js\/([^"'?#]+\.js)/)
     return match ? match[1] : null
   } catch {
-    // Offline or blocked — no answer, so no conclusion, so no reload.
+    // Offline, timed out, or blocked — no answer, so no conclusion, so no reload.
     return null
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -77,8 +82,9 @@ export function watchForUpdates(
 
   const check = async () => {
     if (reloading) return
-    // Only burn a request when the tab can actually act on the answer.
+    // Only burn a request when the tab is visible and online.
     if (document.visibilityState === 'hidden') return
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
     try {
       await registration.update()
     } catch {

@@ -80,7 +80,6 @@ export default function CompanyDetailPage() {
     queryFn: ({ signal }) =>
       fetchWithRateLimit<CompanyDetail>(`/company/${id}?language=${locale}`, { signal }),
     staleTime: 10 * 60 * 1000,
-    retry: 1,
   })
 
   const creditsQuery = useQuery<{ movies: MediaCredit[]; tvShows: MediaCredit[] }>({
@@ -92,7 +91,6 @@ export default function CompanyDetailPage() {
       return { movies: dedupe(mv), tvShows: dedupe(tv) }
     },
     staleTime: 10 * 60 * 1000,
-    retry: 1,
   })
 
   const company = companyQuery.data ?? null

@@ -144,8 +144,6 @@ export default function CategoryPage() {
         })
       : fetchCuratedPage(endpoints.movie, endpoints.tv, page, locale, { signal }),
     placeholderData: keepPreviousData,
-    retry: 2,
-    retryDelay: 1000,
   })
 
   // Region streaming catalog — same curated Netflix/Prime-first list as home.
@@ -153,7 +151,6 @@ export default function CategoryPage() {
     queryKey: ['region_providers', region, locale],
     queryFn: () => getRegionProviders(region, locale),
     staleTime: Infinity,
-    retry: 1,
   })
   const platformOptions = regionProviders ?? []
 

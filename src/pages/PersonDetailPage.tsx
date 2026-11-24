@@ -124,7 +124,6 @@ export default function PersonDetailPage() {
       }
     },
     staleTime: 10 * 60 * 1000,
-    retry: 1,
   })
 
   const person = personQuery.data?.person ?? null

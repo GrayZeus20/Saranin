@@ -90,8 +90,6 @@ export default function SearchPage() {
     },
     enabled: q.length > 0,
     placeholderData: keepPreviousData,
-    retry: 2,
-    retryDelay: 1000,
   })
 
   const items = useMemo(() => searchQuery.data?.items ?? [], [searchQuery.data])

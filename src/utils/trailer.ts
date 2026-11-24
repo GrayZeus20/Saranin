@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchWithRateLimit } from './api'
+import { isLowBandwidth, useNetworkState } from './network'
 
 interface VideosResponse {
   results?: Array<{ key: string; site: string; type: string; official?: boolean }>
@@ -38,7 +39,8 @@ export function useTrailerHover(mediaType: 'movie' | 'tv', id: number) {
   const [hovering, setHovering] = useState(false)
   const [armed, setArmed] = useState(false)
   const [playing, setPlaying] = useState(false)
-  const canHover = useMemo(canHoverPreview, [])
+  const { offlineMode } = useNetworkState()
+  const canHover = useMemo(canHoverPreview, []) && !offlineMode && !isLowBandwidth()
 
   // Short intent delay: a pointer crossing the card on the way somewhere else
   // must not fire a request or mount an embed.

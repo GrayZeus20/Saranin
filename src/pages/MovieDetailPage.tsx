@@ -188,7 +188,6 @@ export default function MovieDetailPage() {
       return normalized
     },
     staleTime: 10 * 60 * 1000,
-    retry: 1,
   })
 
   const detail = detailQuery.data ?? null

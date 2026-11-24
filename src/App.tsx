@@ -351,8 +351,6 @@ export default function App() {
         })
       : fetchCuratedPage(endpoints.movie, endpoints.tv, currentPage, locale, { heroSlot: currentPage === 1, signal }),
     placeholderData: keepPreviousData,
-    retry: 2,
-    retryDelay: 1000,
   })
 
   // --- Region streaming catalog for the Platform filter ---
@@ -360,7 +358,6 @@ export default function App() {
     queryKey: ['region_providers', region, locale],
     queryFn: () => getRegionProviders(region, locale),
     staleTime: Infinity,
-    retry: 1,
   })
   const platformOptions = regionProviders ?? []
 
@@ -371,17 +368,14 @@ export default function App() {
   const trendingRow = useQuery({
     queryKey: ['row', 'trending', locale],
     queryFn: () => fetchCuratedPage('/trending/movie/week', '/trending/tv/week', 1, locale),
-    retry: 2,
   })
   const popularRow = useQuery({
     queryKey: ['row', 'popular', locale],
     queryFn: () => fetchCuratedPage('/movie/popular', '/tv/popular', 1, locale),
-    retry: 2,
   })
   const topRatedRow = useQuery({
     queryKey: ['row', 'top_rated', locale],
     queryFn: () => fetchCuratedPage('/movie/top_rated', '/tv/top_rated', 1, locale),
-    retry: 2,
   })
 
   // --- "Because you saved X": recommendations seeded by the newest watchlist entry ---

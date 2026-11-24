@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { fetchWithRateLimit } from '../utils/api'
 import { tmdbImage } from '../utils/imageSizes'
 import { ImageWithFallback } from './ImageWithFallback'
+import { OfflineBanner } from './OfflineBanner'
 import { REGION_MAP } from '../utils/constants'
 import { useRegion } from '../utils/region'
 import { useLocale, type Locale } from '../utils/locale'
@@ -107,13 +108,14 @@ function SearchField({
 // idle, results once a query resolves, plus the "see all" row. The result list
 // is a listbox: the input keeps focus and moves `activeIndex` with arrow keys.
 function SearchPanel({
-  id, showTrending, showSearchResults, searchResults, activeIndex, searchInput, recentSearches,
+  id, showTrending, showSearchResults, searchResults, searchFailed, activeIndex, searchInput, recentSearches,
   onPickTerm, onPickResult, onSeeAll, onRemoveRecent, onClearRecent,
 }: {
   id: string
   showTrending: boolean
   showSearchResults: boolean
   searchResults: SearchResult[]
+  searchFailed: boolean
   activeIndex: number
   searchInput: string
   recentSearches: string[]
@@ -237,10 +239,16 @@ function SearchPanel({
   if (showSearchResults && searchResults.length === 0 && searchInput.trim().length >= 2) {
     return (
       <div id={id} data-search-panel className="absolute top-full mt-2 w-full bg-surface-elevated border border-zinc-800 rounded-xl overflow-hidden shadow-2xl z-50">
-        <p className="text-text-muted text-xs text-center py-5 px-4">
-          No title matches "<span className="text-text-primary font-bold">{searchInput.trim()}</span>".
-          Press <span className="text-accent font-bold">Enter</span> to search the full catalogue.
-        </p>
+        {searchFailed ? (
+          <p className="text-text-muted text-xs text-center py-5 px-4">
+            Offline or slow connection — live search is unavailable right now.
+          </p>
+        ) : (
+          <p className="text-text-muted text-xs text-center py-5 px-4">
+            No title matches "<span className="text-text-primary font-bold">{searchInput.trim()}</span>".
+            Press <span className="text-accent font-bold">Enter</span> to search the full catalogue.
+          </p>
+        )}
         <button
           type="button"
           onClick={onSeeAll}
@@ -392,6 +400,7 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [searchFailed, setSearchFailed] = useState(false)
   const [showSearchResults, setShowSearchResults] = useState(false)
   const [showTrending, setShowTrending] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
@@ -541,12 +550,15 @@ export default function Navbar() {
         if (results.length === 8) break
       }
       setSearchResults(results)
+      setSearchFailed(false)
       setActiveIndex(-1)
       setShowSearchResults(true)
     } catch {
       if (token !== searchTokenRef.current) return
       setSearchResults([])
+      setSearchFailed(true)
       setActiveIndex(-1)
+      setShowSearchResults(true)
     }
   }, [locale])
 
@@ -651,6 +663,7 @@ export default function Navbar() {
           the bar position:fixed — the page then pads its own top by
           NAV_HEIGHT so nothing hides underneath it. */}
       <div aria-hidden="true" className="h-14 safe-top shrink-0" />
+      <OfflineBanner />
       <nav
         className="fixed top-0 left-0 right-0 z-40 bg-surface/80 backdrop-blur-md border-b border-zinc-800/50 safe-top"
       >
@@ -724,6 +737,7 @@ export default function Navbar() {
                   showTrending={showTrending}
                   showSearchResults={showSearchResults}
                   searchResults={searchResults}
+                  searchFailed={searchFailed}
                   activeIndex={activeIndex}
                   searchInput={searchInput}
                   recentSearches={recentSearches}
@@ -805,6 +819,7 @@ export default function Navbar() {
                 showTrending={showTrending}
                 showSearchResults={showSearchResults}
                 searchResults={searchResults}
+                searchFailed={searchFailed}
                 activeIndex={activeIndex}
                 searchInput={searchInput}
                 recentSearches={recentSearches}
